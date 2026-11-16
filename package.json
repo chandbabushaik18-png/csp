@@ -4,14 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node -e \"const fs=require('fs');const p=['server_part_0.ts.txt','server_part_1.ts.txt','server_part_2.ts.txt'];if(p.every(f=>fs.existsSync(f)))fs.writeFileSync('server.ts',p.map(f=>fs.readFileSync(f,'utf8')).join(''));\"",
+    "predev": "node scripts/rebuild-server.mjs",
     "dev": "tsx server.ts",
-    "prestart": "node -e \"const fs=require('fs');const p=['server_part_0.ts.txt','server_part_1.ts.txt','server_part_2.ts.txt'];if(p.every(f=>fs.existsSync(f)))fs.writeFileSync('server.ts',p.map(f=>fs.readFileSync(f,'utf8')).join(''));\"",
+    "prestart": "node scripts/rebuild-server.mjs",
     "start": "tsx server.ts",
     "build": "vite build",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit",
-    "reconstruct-server": "node -e \"const fs=require('fs');const p=['server_part_0.ts.txt','server_part_1.ts.txt','server_part_2.ts.txt'];fs.writeFileSync('server.ts',p.map(f=>fs.readFileSync(f,'utf8')).join(''));console.log('server.ts reconstructed',fs.statSync('server.ts').size)\""
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/earthengine": "^1.7.52",
