@@ -1,10 +1,14 @@
-import { existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const implPath = path.join(__dirname, 'server_impl.ts');
-if (!existsSync(implPath)) {
-  console.error('Missing server_impl.ts — pull latest from GitHub main');
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const a = path.join(dir, 'server_part_0.txt');
+const b = path.join(dir, 'server_part_1.txt');
+if (!existsSync(a) || !existsSync(b)) {
+  console.error('Missing server_part_0.txt or server_part_1.txt — refresh from GitHub main');
   process.exit(1);
 }
-await import('./server_impl.ts');
+const code = readFileSync(a, 'utf8') + readFileSync(b, 'utf8');
+const out = path.join(dir, '_server_assembled.mts');
+writeFileSync(out, code);
+await import('./_server_assembled.mts');
