@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import dotenv from 'dotenv';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
@@ -160,7 +160,7 @@ app.get('/api/weather', async (req: Request, res: Response) => {
         isRealTime: false,
         isModelEstimate: true,
         locationLabel: city ? `${city} (${lat.toFixed(4)}N, ${lon.toFixed(4)}E)` : `${lat.toFixed(4)}N, ${lon.toFixed(4)}E`,
-        notes: 'Model-based numerical weather prediction for selected coordinates — not a direct physical weather-station measurement.',
+        notes: 'Model-based numerical weather prediction for selected coordinates.',
         methodology: 'Global NWP assimilation at ~0.1 resolution.',
       },
       location: {
@@ -505,20 +505,55 @@ app.post('/api/profit', async (req: Request, res: Response) => {
 
 async function startServer() {
   const httpServer = http.createServer(app);
-  app.all('/api/*', (req: Request, res: Response) => {
-    res.status(404).json({ success: false, integrityState: 'UNAVAILABLE', error: `API route not found: ${req.method} ${req.originalUrl}` });
+
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      ok: true,
+      service: 'FarmersNeed',
+      version: '2.2.0',
+      gemini: !!aiClient,
+      time: new Date().toISOString(),
+    });
   });
-  if (process.env.NODE_ENV !== 'production') {
+
+  app.all('/api/*', (req: Request, res: Response) => {
+    res.status(404).json({
+      success: false,
+      integrityState: 'UNAVAILABLE',
+      error: `API route not found: ${req.method} ${req.originalUrl}`,
+    });
+  });
+
+  const distPath = path.resolve(__dirname, 'dist');
+  let hasDist = false;
+  try {
+    const fs = await import('fs');
+    hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  } catch {
+    hasDist = false;
+  }
+
+  // Prefer Vite middleware whenever dist is missing (typical for AI Studio preview).
+  const useVite = process.env.NODE_ENV !== 'production' || !hasDist;
+
+  if (useVite) {
     let viteMiddleware: ((req: Request, res: Response, next: NextFunction) => void) | null = null;
     let viteError: Error | null = null;
     const viteReady = (async () => {
       const { createServer: createViteServer } = await import('vite');
       const disableHmr = process.env.DISABLE_HMR === 'true';
       const vite = await createViteServer({
-        server: { middlewareMode: true, hmr: disableHmr ? false : { server: httpServer }, ws: disableHmr ? false : undefined, watch: disableHmr ? null : {} },
+        server: {
+          middlewareMode: true,
+          hmr: disableHmr ? false : { server: httpServer },
+          ws: disableHmr ? false : undefined,
+          watch: disableHmr ? null : {},
+        },
         appType: 'spa',
       });
       viteMiddleware = vite.middlewares as any;
+      console.log('Vite middleware ready (SPA)');
     })().catch((err) => {
       viteError = err instanceof Error ? err : new Error(String(err));
       console.error('Failed to initialize Vite:', err);
@@ -530,14 +565,14 @@ async function startServer() {
       return next();
     });
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`FarmersNeed 2.2.0 running on port ${PORT}; gemini=${!!aiClient}`);
+    console.log(`FarmersNeed 2.2.0 on :${PORT}; gemini=${!!aiClient}; vite=${useVite}`);
   });
 }
 
