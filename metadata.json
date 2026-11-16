@@ -1,0 +1,6 @@
+{
+  "name": "FarmersNeed – Smart Agriculture & Farmer Assistance",
+  "description": "Advanced agricultural intelligence platform for smart crop recommendation, weather forecasts, profit estimation, drone booking, mandi prices, and Telugu farmer assistance.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

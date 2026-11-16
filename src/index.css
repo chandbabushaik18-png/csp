@@ -1,0 +1,156 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-canvas: #F5F6F3;
+    --forest-primary: #174C36;
+    --accent-green: #4D966B;
+    --soft-mint: #DDEDE2;
+    --glass-surface: rgba(255, 255, 255, 0.72);
+    --glass-surface-strong: rgba(255, 255, 255, 0.86);
+    --glass-border: rgba(255, 255, 255, 0.75);
+    --text-main: #202820;
+    --text-muted: #858D86;
+
+    --font-sans: 'Manrope', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Outfit', 'Manrope', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-canvas);
+    color: var(--text-main);
+    letter-spacing: -0.011em;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ==========================================
+   APPLE macOS LIQUID GLASS SYSTEM
+   ========================================== */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 10px 36px -12px rgba(23, 76, 54, 0.08),
+    0 2px 10px -2px rgba(32, 40, 32, 0.04),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.85);
+}
+
+.glass-panel-elevated {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 20px 50px -16px rgba(23, 76, 54, 0.14),
+    0 4px 16px -4px rgba(32, 40, 32, 0.06),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+}
+
+.glass-sidebar {
+  background: rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(28px) saturate(175%);
+  -webkit-backdrop-filter: blur(28px) saturate(175%);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 18px 48px -18px rgba(23, 76, 54, 0.12),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+}
+
+.glass-dark-overlay {
+  background: rgba(20, 42, 32, 0.62);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 16px 40px -12px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
+}
+
+.surface-card {
+  background: #ffffff;
+  border: 1px solid rgba(23, 76, 54, 0.08);
+  box-shadow: 0 4px 20px -6px rgba(23, 76, 54, 0.05);
+}
+
+/* Water tank liquid wave animation */
+@keyframes waveSlide {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-water-wave {
+  animation: waveSlide 5s linear infinite;
+}
+
+/* Subtle loading shimmer */
+@keyframes glassShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-glass {
+  background: linear-gradient(
+    90deg,
+    rgba(221, 237, 226, 0.35) 25%,
+    rgba(255, 255, 255, 0.7) 50%,
+    rgba(221, 237, 226, 0.35) 75%
+  );
+  background-size: 200% 100%;
+  animation: glassShimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-water-wave,
+  .skeleton-glass {
+    animation: none;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(23, 76, 54, 0.18);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(23, 76, 54, 0.35);
+}
+
+/* Ensure Leaflet z-index stays cleanly below floating drawers/modals while letting internal glass controls stay on top */
+.leaflet-pane {
+  z-index: 10 !important;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 20 !important;
+}
