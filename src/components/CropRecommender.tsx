@@ -3,6 +3,7 @@ import { ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
 import { Language, RecommendationResponse, RecommendedCrop, FarmProfile } from '../types';
 import { translations } from '../translations';
 import { DataProvenanceBadge } from './DataProvenanceBadge';
+import { safeFetchJson } from '../utils/safeFetchJson';
 
 interface CropRecommenderProps {
   currentLang: Language;
@@ -28,6 +29,7 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
   const [district, setDistrict] = useState(farm?.district || 'Guntur');
 
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<RecommendationResponse | null>(null);
 
   useEffect(() => {
@@ -61,8 +63,9 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
 
   const fetchRecommendations = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
-      const res = await fetch('/api/recommendations', {
+      const res = await safeFetchJson<any>('/api/recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -74,12 +77,15 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
           village: farm?.village,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = res.data;
+      if (res.ok && data?.success) {
         setResult(data);
+      } else {
+        setErrorMsg(data?.error || `Failed to load recommendations (HTTP ${res.status}).`);
       }
     } catch (err) {
       console.error('Failed to fetch recommendations:', err);
+      setErrorMsg('Network error while contacting agronomic planning service.');
     } finally {
       setLoading(false);
     }
@@ -104,7 +110,7 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
     'Tank / Well (చెరువు / బావి)',
   ];
 
-  const districtOptions = [
+  const baseDistricts = [
     'Guntur',
     'Warangal',
     'Hanamkonda',
@@ -117,6 +123,10 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
     'West Godavari',
     'Karimnagar',
   ];
+  const districtOptions =
+    farm?.district && !baseDistricts.includes(farm.district)
+      ? [farm.district, ...baseDistricts]
+      : baseDistricts;
 
   return (
     <div className="space-y-6 pb-8">
@@ -224,6 +234,13 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
         </div>
       </div>
 
+      {/* Error Alert */}
+      {errorMsg && (
+        <div className="glass-panel rounded-[20px] p-4 bg-red-50/80 border border-red-200 text-xs text-red-900 font-medium">
+          {errorMsg}
+        </div>
+      )}
+
       {/* Loading Skeleton */}
       {loading && !result && (
         <div className="glass-panel rounded-[24px] p-8 space-y-4">
@@ -307,11 +324,11 @@ export const CropRecommender: React.FC<CropRecommenderProps> = ({
             </div>
 
             <div>
-              <div className="text-[#858D86]">Avg Market Rate</div>
+              <div className="text-[#858D86]">Reference Planning Rate</div>
               <div className="text-sm font-bold text-[#202820] font-mono tabular-nums mt-0.5">
                 ₹{result.primaryRecommendation.expectedPricePerQuintal.toLocaleString('en-IN')} / Qtl
               </div>
-              <div className="text-[#4D966B] mt-0.5 font-medium">Mandi spot benchmark</div>
+              <div className="text-[#4D966B] mt-0.5 font-medium">Planning Estimate (Not live APMC)</div>
             </div>
 
             <div>

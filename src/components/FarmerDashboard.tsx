@@ -6,14 +6,14 @@ import {
   Plane,
   ArrowRight,
   Sparkles,
-  CheckCircle2,
   Clock,
   Satellite,
   Cpu,
   Ruler,
-  ShieldCheck,
   Calculator,
   Radio,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   FarmProfile,
@@ -32,7 +32,10 @@ interface FarmerDashboardProps {
   currentLang: Language;
   farm: FarmProfile;
   weather: WeatherData | null;
+  weatherError?: string | null;
+  onRetryWeather?: () => void;
   marketPrices: MarketPrice[];
+  marketMessage?: string | null;
   waterAdvisory: WaterAdvisoryData | null;
   satelliteData: SatelliteAnalysis | null;
   iotStatus?: IotDeviceStatus | null;
@@ -45,7 +48,10 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   currentLang,
   farm,
   weather,
+  weatherError,
+  onRetryWeather,
   marketPrices,
+  marketMessage,
   waterAdvisory,
   satelliteData,
   iotStatus,
@@ -54,46 +60,45 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   onBookDrone,
 }) => {
   const t = translations[currentLang];
+  const iotConnected = Boolean(iotStatus?.connected && iotStatus.latestTelemetry);
+  const hasSatelliteScene = Boolean(satelliteData?.sceneId && satelliteData?.acquisitionDate);
 
   const morningAction = waterAdvisory
     ? `Operate ${farm.irrigationMethod} pump for ${waterAdvisory.pumpingHoursDaily} hours to supply ${waterAdvisory.dailyLitersPerAcre.toLocaleString(
         'en-IN'
-      )} L/acre before daytime heat.`
-    : 'Apply early morning irrigation before 08:30 AM to reduce evaporative losses.';
+      )} L/acre (calculated from Open-Meteo ET0 ${waterAdvisory.et0_mm} mm).`
+    : 'Irrigation schedule awaits live Open-Meteo evapotranspiration retrieval for your coordinates.';
 
   const morningActionTe = waterAdvisory
-    ? `ఎండ పెరగక ముందే ${waterAdvisory.pumpingHoursDaily} గంటలు మోటారు నడిపి ఎకరాకు ${waterAdvisory.dailyLitersPerAcre.toLocaleString(
+    ? `Open-Meteo ET0 (${waterAdvisory.et0_mm} మి.మీ) ఆధారంగా ${waterAdvisory.pumpingHoursDaily} గంటలు మోటారు నడిపి ఎకరాకు ${waterAdvisory.dailyLitersPerAcre.toLocaleString(
         'en-IN'
       )} లీటర్లు అందించండి.`
-    : 'ఎండ పెరగక ముందే ఉదయం 08:30 లోపు తడి ఇవ్వండి.';
+    : 'నీటి లెక్కలు పొందడానికి వాతావరణ డేటా కోసం వేచి ఉంది.';
 
-  const windSpeed = weather?.current.windSpeedKmh ?? 8;
-  const temp = weather?.current.temp ?? 29;
-  const isSpraySafe = weather?.current.sprayBadge === 'ideal';
+  const afternoonAction = weather
+    ? weather.current.sprayBadge === 'ideal'
+      ? `Model forecast shows low wind (${weather.current.windSpeedKmh} km/h, ${weather.current.temp}°C). Suitable window for foliar spraying.`
+      : `Spraying caution: Forecast wind speed ${weather.current.windSpeedKmh} km/h & ${weather.current.temp}°C. Postpone chemical spraying.`
+    : 'Weather forecast unavailable — verify local wind speed visually before spraying.';
 
-  const afternoonAction = isSpraySafe
-    ? `Wind velocity is low (${windSpeed} km/h, ${temp}°C). Safe window for precision foliar nutrient or protective spraying.`
-    : `Chemical drift risk: Wind speed ${windSpeed} km/h & ${temp}°C. Postpone chemical spraying until late evening.`;
+  const afternoonActionTe = weather
+    ? weather.current.sprayBadge === 'ideal'
+      ? `గాలి వేగం తక్కువగా ఉంది (${weather.current.windSpeedKmh} కి.మీ/గం, ${weather.current.temp}°C). పిచికారీకి అనుకూలం.`
+      : `గాలి వేగం (${weather.current.windSpeedKmh} కి.మీ/గం) లేదా ఉష్ణోగ్రత (${weather.current.temp}°C) వల్ల పిచికారీ వాయిదా వేయండి.`
+    : 'వాతావరణ అంచనా అందుబాటులో లేదు — పిచికారీకి ముందు గాలిని పరిశీలించండి.';
 
-  const afternoonActionTe = isSpraySafe
-    ? `వాతావరణం అనుకూలంగా ఉంది (గాలి: ${windSpeed} కి.మీ/గం, ఉష్ణోగ్రత: ${temp}°C). పిచికారీ చేయవచ్చు.`
-    : `గాలి వేగం (${windSpeed} కి.మీ/గం) లేదా ఎండ (${temp}°C) వల్ల రసాయనాలు కొట్టుకుపోయే ప్రమాదం ఉంది. పిచికారీని వాయిదా వేయండి.`;
+  const eveningAction = hasSatelliteScene
+    ? `Latest Sentinel-2 pass recorded on ${satelliteData!.acquisitionDate} (${satelliteData!.cloudCoveragePercent}% cloud cover). Inspect the field visually for pest or moisture stress.`
+    : 'Walk field edges to inspect leaf undersides for thrips, mites, or moisture stress; capture clear leaf photos for AI Crop Doctor if needed.';
 
-  const stressCount = satelliteData?.stressHotspotsCount ?? 0;
-  const eveningAction =
-    stressCount > 0
-      ? `Scout perimeter zone flagged with localized stress on Sentinel-2 (${satelliteData?.acquisitionDate || 'Recent Pass'}); verify drip emitters or leaf curl.`
-      : `Canopy biomass looks strong (NDVI ${satelliteData?.meanNdvi ?? 0.72}). Complete routine sticky-trap inspection.`;
-
-  const eveningActionTe =
-    stressCount > 0
-      ? 'ఉపగ్రహ పరిశీలనలో గుర్తించిన ఒత్తిడి భాగంలో డ్రిప్ పైపులు మరియు చీడపీడలను స్వయంగా పరిశీలించండి.'
-      : 'పంట పచ్చదనం సంతృప్తికరంగా ఉంది. సాయంత్రం వేళ పురుగుల ఆనవాళ్లు ఉన్నాయేమో పరిశీలించండి.';
+  const eveningActionTe = hasSatelliteScene
+    ? `తాజా Sentinel-2 ఉపగ్రహ పాస్ (${satelliteData!.acquisitionDate}) నమోదైంది. పొలంలో ఆకుల అడుగు భాగాన్ని స్వయంగా పరిశీలించండి.`
+    : 'సాయంత్రం పొలంలో ఆకులు మరియు చీడపీడలను స్వయంగా పరిశీలించండి.';
 
   const dailyActivities: DailyActivity[] = [
     {
       timeSlot: 'Morning (06:00 - 09:00 AM)',
-      title: 'Precision Irrigation Schedule',
+      title: 'FAO-56 Irrigation Budget',
       titleTe: 'శాస్త్రీయ నీటి యాజమాన్యం',
       action: morningAction,
       actionTe: morningActionTe,
@@ -102,16 +107,16 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     },
     {
       timeSlot: 'Afternoon (12:00 - 03:00 PM)',
-      title: isSpraySafe ? 'Controlled Spray Window' : 'Chemical Drift Warning',
-      titleTe: isSpraySafe ? 'అనుకూల పిచికారీ సమయం' : 'పిచికారీని వాయిదా వేయండి',
+      title: weather?.current.sprayBadge === 'ideal' ? 'Spray Window Assessment' : 'Spray Drift Advisory',
+      titleTe: weather?.current.sprayBadge === 'ideal' ? 'పిచికారీ అంచనా' : 'పిచికారీ హెచ్చరిక',
       action: afternoonAction,
       actionTe: afternoonActionTe,
-      priority: isSpraySafe ? 'Medium' : 'High',
+      priority: weather?.current.sprayBadge === 'ideal' ? 'Medium' : 'High',
       type: 'spraying',
     },
     {
       timeSlot: 'Evening (04:30 - 07:00 PM)',
-      title: 'Field Scouting & Inspection',
+      title: 'Manual Field Scouting',
       titleTe: 'క్షేత్ర స్థాయి పరిశీలన',
       action: eveningAction,
       actionTe: eveningActionTe,
@@ -120,17 +125,15 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     },
   ];
 
-  const iotConnected = Boolean(iotStatus?.connected && iotStatus.latestTelemetry);
-
   return (
     <div className="space-y-6 pb-8">
-      {/* Greeting & Active Farm Identity Header */}
+      {/* Farm Header & Core KPI Strip */}
       <div className="glass-panel rounded-[24px] p-6 sm:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#4D966B]">
-                Parcel · {farm.id}
+                Selected Plot · {farm.id}
               </span>
               {farm.provenance && <DataProvenanceBadge provenance={farm.provenance} />}
             </div>
@@ -138,15 +141,14 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#202820] font-display tracking-tight">
               {t.dashboardWelcome}
             </h1>
-            <p className="text-sm text-[#858D86]">
-              {t.dashboardGreetingSub}
-            </p>
+            <p className="text-sm text-[#858D86]">{t.dashboardGreetingSub}</p>
 
             <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs text-[#5D665E]">
               <span className="inline-flex items-center gap-1.5 font-semibold text-[#174C36]">
                 <MapPin className="w-3.5 h-3.5 text-[#4D966B]" />
                 <span>
-                  {farm.name} — {farm.village}, {farm.district}
+                  {farm.name} — {farm.village ? `${farm.village}, ` : ''}
+                  {farm.district}
                 </span>
               </span>
               <span className="text-[#858D86]">·</span>
@@ -161,7 +163,6 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             </div>
           </div>
 
-          {/* Primary Actions */}
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               type="button"
@@ -192,7 +193,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
 
         {/* 5 Core KPI Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 mt-7 pt-6 border-t border-[#174C36]/10">
-          {/* 1. Total Farm Area */}
+          {/* 1. Parcel Area */}
           <div className="p-4 rounded-[18px] bg-white/75 border border-white/90">
             <div className="flex items-center justify-between text-[11px] font-semibold text-[#858D86]">
               <span>{t.totalLand}</span>
@@ -201,30 +202,36 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             <div className="text-xl font-extrabold text-[#202820] font-display mt-2 tabular-nums">
               {farm.areaAcres.toFixed(1)} Acres
             </div>
-            <div className="text-[11px] font-mono text-[#4D966B] mt-0.5">
+            <div className="text-[11px] font-mono text-[#4D966B] mt-0.5 truncate">
               {farm.areaHectares.toFixed(2)} Ha · {farm.currentCrop.split('(')[0].trim()}
             </div>
           </div>
 
-          {/* 2. Crop Health (NDVI) */}
+          {/* 2. Sentinel-2 Satellite Pass */}
           <button
             type="button"
             onClick={() => onNavigateTab('satellite')}
             className="p-4 rounded-[18px] bg-white/75 hover:bg-white border border-white/90 text-left transition-colors cursor-pointer"
           >
             <div className="flex items-center justify-between text-[11px] font-semibold text-[#858D86]">
-              <span>Crop Health</span>
+              <span>Sentinel-2 Pass</span>
               <Satellite className="w-3.5 h-3.5 text-[#174C36]" />
             </div>
-            <div className="text-xl font-extrabold text-[#174C36] font-display mt-2 tabular-nums">
-              {satelliteData?.meanNdvi?.toFixed(2) ?? '0.72'} NDVI
+            <div className="text-lg font-extrabold text-[#174C36] font-display mt-2 tabular-nums truncate">
+              {hasSatelliteScene ? satelliteData!.acquisitionDate : 'No Data'}
             </div>
             <div className="text-[11px] text-[#5D665E] mt-0.5 truncate">
-              {satelliteData?.areaBreakdown.healthyVegetationPercent ?? 76}% healthy canopy
+              {hasSatelliteScene
+                ? `${satelliteData!.cloudCoveragePercent}% cloud · ${
+                    satelliteData!.meanNdvi !== null && satelliteData!.meanNdvi !== undefined
+                      ? `NDVI ${satelliteData!.meanNdvi.toFixed(2)}`
+                      : 'NDVI N/A'
+                  }`
+                : 'Open catalog to query'}
             </div>
           </button>
 
-          {/* 3. Soil Moisture */}
+          {/* 3. Soil Moisture (ESP32) */}
           <button
             type="button"
             onClick={() => onNavigateTab('iot')}
@@ -235,30 +242,50 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
               <Cpu className="w-3.5 h-3.5 text-[#4D966B]" />
             </div>
             <div className="text-xl font-extrabold text-[#202820] font-display mt-2 tabular-nums">
-              {iotConnected ? `${iotStatus!.latestTelemetry!.soilMoisturePercent}%` : 'Offline'}
+              {iotConnected ? `${iotStatus!.latestTelemetry!.soilMoisturePercent}%` : 'No Data'}
             </div>
-            <div className="text-[11px] font-mono mt-0.5 text-amber-700">
-              {iotConnected ? 'ESP32 Real Sensor' : 'IoT Offline · Click to setup'}
+            <div className="text-[11px] font-mono mt-0.5 text-[#5D665E] truncate">
+              {iotConnected ? 'ESP32 Live Sensor' : 'ESP32 Not Connected'}
             </div>
           </button>
 
-          {/* 4. Current Temperature */}
-          <button
-            type="button"
-            onClick={() => onNavigateTab('weather')}
-            className="p-4 rounded-[18px] bg-white/75 hover:bg-white border border-white/90 text-left transition-colors cursor-pointer"
-          >
+          {/* 4. Weather Forecast */}
+          <div className="p-4 rounded-[18px] bg-white/75 border border-white/90 text-left">
             <div className="flex items-center justify-between text-[11px] font-semibold text-[#858D86]">
-              <span>Current Temp</span>
+              <span>Forecast Temp</span>
               <CloudSun className="w-3.5 h-3.5 text-[#4D966B]" />
             </div>
-            <div className="text-xl font-extrabold text-[#202820] font-display mt-2 tabular-nums">
-              {weather?.current.temp ?? '--'}°C
-            </div>
-            <div className="text-[11px] text-[#5D665E] mt-0.5 truncate">
-              Wind {weather?.current.windSpeedKmh ?? '--'} km/h · RH {weather?.current.humidity ?? '--'}%
-            </div>
-          </button>
+            {weatherError ? (
+              <div className="mt-2 space-y-1">
+                <div className="text-xs font-bold text-amber-800">Unavailable</div>
+                {onRetryWeather && (
+                  <button
+                    type="button"
+                    onClick={onRetryWeather}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#174C36] hover:underline cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Retry Weather</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigateTab('weather')}
+                className="text-left w-full cursor-pointer"
+              >
+                <div className="text-xl font-extrabold text-[#202820] font-display mt-2 tabular-nums">
+                  {weather ? `${weather.current.temp}°C` : '--'}
+                </div>
+                <div className="text-[11px] text-[#5D665E] mt-0.5 truncate">
+                  {weather
+                    ? `Wind ${weather.current.windSpeedKmh} km/h · RH ${weather.current.humidity}%`
+                    : 'Loading Open-Meteo...'}
+                </div>
+              </button>
+            )}
+          </div>
 
           {/* 5. Irrigation Status */}
           <button
@@ -267,78 +294,93 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             className="p-4 rounded-[18px] bg-[#DDEDE2]/65 hover:bg-[#DDEDE2] border border-[#4D966B]/20 text-left transition-colors cursor-pointer col-span-2 md:col-span-1"
           >
             <div className="flex items-center justify-between text-[11px] font-semibold text-[#174C36]">
-              <span>Irrigation Status</span>
+              <span>Water Budget</span>
               <Droplets className="w-3.5 h-3.5 text-[#174C36]" />
             </div>
             <div className="text-xl font-extrabold text-[#174C36] font-display mt-2 tabular-nums">
-              {waterAdvisory ? `${waterAdvisory.pumpingHoursDaily} hrs` : '-- hrs'}
+              {waterAdvisory ? `${waterAdvisory.pumpingHoursDaily} hrs` : 'No Data'}
             </div>
             <div className="text-[11px] text-[#174C36]/80 mt-0.5 truncate">
-              {waterAdvisory ? `${waterAdvisory.dailyLitersPerAcre.toLocaleString('en-IN')} L/Ac` : farm.irrigationMethod}
+              {waterAdvisory
+                ? `${waterAdvisory.dailyLitersPerAcre.toLocaleString('en-IN')} L/Ac`
+                : farm.irrigationMethod}
             </div>
           </button>
         </div>
       </div>
 
-      {/* Prominent TODAY'S FARM ACTION PLAN Distinguishing Measurements vs Recommendations */}
+      {/* Telemetry vs Calculated Breakdown */}
       <div className="glass-panel rounded-[24px] p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#174C36]/10">
           <div>
-            <div className="flex items-center gap-2 text-[11px] font-mono font-bold uppercase tracking-widest text-[#4D966B]">
-              <span>TODAY'S FARM ACTION PLAN</span>
+            <div className="text-[11px] font-mono font-bold uppercase tracking-widest text-[#4D966B]">
+              DAILY OPERATIONS SUMMARY
             </div>
             <h2 className="text-xl font-bold text-[#202820] font-display mt-1">
-              Field Execution & Telemetry Breakdown
+              Data Source & Execution Breakdown
             </h2>
             <p className="text-xs text-[#858D86] mt-0.5">
-              Transparently separates actual live API/sensor measurements from calculated agronomic advice.
+              Separates model-based weather forecasts and periodic satellite scenes from calculated advice.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#DDEDE2] text-[#174C36] font-semibold">
               <Radio className="w-3 h-3" />
-              <span>Actual Measurements</span>
+              <span>External APIs / Hardware</span>
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-sky-50 text-sky-900 border border-sky-200/70 font-semibold">
               <Calculator className="w-3 h-3" />
-              <span>Calculated Advice</span>
+              <span>Calculated Formulas</span>
             </span>
           </div>
         </div>
 
-        {/* Row 1: Actual Measurements Summary Strip */}
+        {/* Row 1: External Sources Strip */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-5">
           <div className="p-4 rounded-[18px] bg-white/80 border border-[#4D966B]/20 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="font-bold text-[#174C36] flex items-center gap-1.5">
-                <Radio className="w-3.5 h-3.5 text-[#4D966B]" />
-                <span>Measured Microclimate</span>
+                <CloudSun className="w-3.5 h-3.5 text-[#4D966B]" />
+                <span>Open-Meteo NWP Forecast</span>
               </span>
-              <span className="font-mono text-[10px] text-[#4D966B] font-bold">OPEN-METEO</span>
+              <span className="font-mono text-[10px] text-[#4D966B] font-bold">
+                {weatherError ? 'UNAVAILABLE' : weather ? 'LIVE DATA' : 'SYNCING'}
+              </span>
             </div>
-            <div className="text-[#202820] font-semibold">
-              {weather
-                ? `${weather.current.temp}°C · ${weather.current.humidity}% RH · Wind ${weather.current.windSpeedKmh} km/h`
-                : 'Awaiting real weather reading...'}
-            </div>
-            <div className="text-[11px] text-[#858D86]">
-              Spray safety: <strong>{weather?.current.sprayBadge.toUpperCase() || '--'}</strong>
-            </div>
+            {weatherError ? (
+              <div className="text-amber-800 font-medium">{weatherError}</div>
+            ) : (
+              <>
+                <div className="text-[#202820] font-semibold">
+                  {weather
+                    ? `${weather.current.temp}°C · ${weather.current.humidity}% RH · Wind ${weather.current.windSpeedKmh} km/h`
+                    : 'Retrieving Open-Meteo model forecast...'}
+                </div>
+                <div className="text-[11px] text-[#858D86]">
+                  Model estimate (not station sensor) · Spray:{' '}
+                  <strong>{weather?.current.sprayBadge.toUpperCase() || '--'}</strong>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="p-4 rounded-[18px] bg-white/80 border border-[#4D966B]/20 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="font-bold text-[#174C36] flex items-center gap-1.5">
                 <Satellite className="w-3.5 h-3.5 text-[#4D966B]" />
-                <span>Sentinel-2 Pass Observation</span>
+                <span>Copernicus Sentinel-2 Catalog</span>
               </span>
-              <span className="font-mono text-[10px] text-[#4D966B] font-bold">COPERNICUS</span>
+              <span className="font-mono text-[10px] text-[#4D966B] font-bold">
+                {hasSatelliteScene ? 'LIVE DATA' : 'NO DATA'}
+              </span>
             </div>
             <div className="text-[#202820] font-semibold">
-              Mean NDVI {satelliteData?.meanNdvi ?? 0.72} · NDWI {satelliteData?.meanNdwi ?? 0.28}
+              {hasSatelliteScene
+                ? `Pass: ${satelliteData!.acquisitionDate} (${satelliteData!.cloudCoveragePercent}% cloud)`
+                : 'No scene loaded for current parcel'}
             </div>
             <div className="text-[11px] text-[#858D86]">
-              Acquired: {satelliteData?.acquisitionDate ?? 'Latest Overpass'} ({satelliteData?.cloudCoveragePercent ?? 18}% cloud)
+              Pixel-level NDVI/NDWI computation: <span className="font-mono font-semibold">NO DATA</span>
             </div>
           </div>
 
@@ -346,19 +388,25 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             <div className="flex items-center justify-between">
               <span className="font-bold text-[#202820] flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5 text-[#858D86]" />
-                <span>ESP32 Root-Zone Probe</span>
+                <span>ESP32 Soil Probe</span>
               </span>
-              <span className="font-mono text-[10px] text-amber-700 font-bold">
-                {iotConnected ? 'LIVE HARDWARE' : 'OFFLINE'}
+              <span
+                className={`font-mono text-[10px] font-bold ${
+                  iotConnected ? 'text-[#174C36]' : 'text-[#858D86]'
+                }`}
+              >
+                {iotConnected ? 'LIVE DATA' : 'NO DATA'}
               </span>
             </div>
             <div className="text-[#202820] font-semibold">
               {iotConnected
                 ? `${iotStatus!.latestTelemetry!.soilMoisturePercent}% Moisture · ${iotStatus!.latestTelemetry!.temperatureC}°C`
-                : 'No live sensor connected'}
+                : 'ESP32 device is not connected'}
             </div>
             <div className="text-[11px] text-[#858D86]">
-              {iotConnected ? 'Hardware relay ready' : 'Water budget falls back to FAO-56 ET0 & rainfall'}
+              {iotConnected
+                ? `Last packet: ${new Date(iotStatus!.latestTelemetry!.receivedAt).toLocaleTimeString()}`
+                : 'Water budget uses Open-Meteo ET0 & rainfall'}
             </div>
           </div>
         </div>
@@ -399,7 +447,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
               </div>
 
               <div className="pt-2.5 border-t border-[#174C36]/10 flex items-center justify-between text-[#858D86] text-[11px]">
-                <span className="capitalize">{act.type} recommendation</span>
+                <span className="capitalize">{act.type} guidance</span>
                 <span className="text-[#174C36] font-mono text-[10px] font-semibold">CALCULATED</span>
               </div>
             </div>
@@ -407,20 +455,26 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
         </div>
       </div>
 
-      {/* Live APMC Mandi Market Prices Spotlight */}
+      {/* Market Prices Spotlight */}
       <div className="glass-panel rounded-[24px] p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-bold text-[#202820] font-display">
-                APMC Mandi Benchmark Prices & MSP
+                APMC Mandi Market Feed
               </h3>
-              <span className="text-[10px] bg-[#DDEDE2]/80 text-[#174C36] px-2.5 py-0.5 rounded-lg font-mono font-semibold">
-                Agmarknet / CACP 2024-26
+              <span
+                className={`text-[10px] px-2.5 py-0.5 rounded-lg font-mono font-semibold ${
+                  marketPrices.length > 0
+                    ? 'bg-[#DDEDE2]/80 text-[#174C36]'
+                    : 'bg-amber-50 text-amber-900 border border-amber-200'
+                }`}
+              >
+                {marketPrices.length > 0 ? 'LIVE DATA · Agmarknet' : 'UNAVAILABLE'}
               </span>
             </div>
             <p className="text-xs text-[#858D86] mt-0.5">
-              Modal yard transaction quotes across Andhra Pradesh & Telangana.
+              Official APMC yard quotes retrieved from data.gov.in when API credentials are configured.
             </p>
           </div>
           <button
@@ -428,29 +482,39 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             onClick={() => onNavigateTab('market')}
             className="text-xs font-semibold text-[#174C36] hover:text-[#4D966B] flex items-center gap-1 cursor-pointer self-start sm:self-auto"
           >
-            <span>All Commodities</span>
+            <span>Open Market Prices</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
-          {marketPrices.slice(0, 4).map((p) => (
-            <div key={p.cropKey} className="p-4 rounded-[18px] bg-white/80 border border-white text-xs">
-              <div className="font-bold text-[#202820] truncate">{p.commodity}</div>
-              <div className="text-[#858D86] text-[11px] mt-0.5">{p.market}</div>
-              <div className="text-xl font-bold text-[#174C36] font-display tabular-nums mt-2.5">
-                ₹{p.modalPrice.toLocaleString('en-IN')}
-                <span className="text-[11px] text-[#858D86] font-normal"> / Qtl</span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-[#858D86] mt-2 pt-2 border-t border-[#174C36]/10 font-mono tabular-nums">
-                <span>MSP: ₹{p.msp.toLocaleString('en-IN')}</span>
-                <span className={p.trend === 'down' ? 'text-red-600 font-bold' : 'text-[#4D966B] font-bold'}>
-                  {p.change}
-                </span>
-              </div>
+        {marketPrices.length === 0 ? (
+          <div className="mt-5 p-5 rounded-[18px] bg-amber-50/60 border border-amber-200/70 flex items-start gap-3 text-xs text-amber-950">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold">Market data currently unavailable</div>
+              <p className="text-amber-900 mt-0.5">
+                {marketMessage || 'Agmarknet API credentials (DATA_GOV_API_KEY) are not configured on the server.'}
+              </p>
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+            {marketPrices.slice(0, 4).map((p) => (
+              <div key={p.cropKey} className="p-4 rounded-[18px] bg-white/80 border border-white text-xs">
+                <div className="font-bold text-[#202820] truncate">{p.commodity}</div>
+                <div className="text-[#858D86] text-[11px] mt-0.5 truncate">{p.market}</div>
+                <div className="text-xl font-bold text-[#174C36] font-display tabular-nums mt-2.5">
+                  ₹{p.modalPrice.toLocaleString('en-IN')}
+                  <span className="text-[11px] text-[#858D86] font-normal"> / Qtl</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-[#858D86] mt-2 pt-2 border-t border-[#174C36]/10 font-mono tabular-nums">
+                  <span>{p.msp ? `MSP: ₹${p.msp.toLocaleString('en-IN')}` : `As of ${p.asOfDate}`}</span>
+                  <span className="font-bold text-[#4D966B]">{p.change}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MapPin, Calendar } from 'lucide-react';
+import { Plus, MapPin, Calendar, AlertCircle } from 'lucide-react';
 import { Language, LabourRequest } from '../types';
 import { translations } from '../translations';
+import { safeFetchJson } from '../utils/safeFetchJson';
 
 interface LabourNetworkProps {
   currentLang: Language;
@@ -14,24 +15,24 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  const [farmerName, setFarmerName] = useState('Venkateswara Rao');
-  const [phone, setPhone] = useState('9848022134');
-  const [village, setVillage] = useState('Pedavadlapudi');
-  const [district, setDistrict] = useState('Guntur');
+  const [farmerName, setFarmerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [village, setVillage] = useState('');
+  const [district, setDistrict] = useState('');
   const [workType, setWorkType] = useState('Chilli Picking & Bagging');
-  const [workersNeeded, setWorkersNeeded] = useState(8);
-  const [dailyWage, setDailyWage] = useState(600);
-  const [startDate, setStartDate] = useState('2026-11-12');
-  const [durationDays, setDurationDays] = useState(3);
+  const [workersNeeded, setWorkersNeeded] = useState(4);
+  const [dailyWage, setDailyWage] = useState(500);
+  const [startDate, setStartDate] = useState('');
+  const [durationDays, setDurationDays] = useState(2);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/labour-requests');
-      if (res.ok) {
-        const data = await res.json();
-        setRequests(data.requests || []);
+      const res = await safeFetchJson<{ requests?: LabourRequest[] }>('/api/labour-requests');
+      if (res.ok && res.data) {
+        setRequests(res.data.requests || []);
       }
     } catch (e) {
       console.error(e);
@@ -47,8 +48,9 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorMsg(null);
     try {
-      const res = await fetch('/api/labour-requests', {
+      const res = await safeFetchJson<any>('/api/labour-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -63,12 +65,20 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
           durationDays,
         }),
       });
-      if (res.ok) {
+      const data = res.data;
+      if (res.ok && data?.success) {
         setShowModal(false);
+        setFarmerName('');
+        setPhone('');
+        setVillage('');
+        setDistrict('');
+        setStartDate('');
         fetchRequests();
+      } else {
+        setErrorMsg(data?.error || 'Could not publish labour request.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setErrorMsg('Network error while publishing labour request.');
     } finally {
       setSubmitting(false);
     }
@@ -90,7 +100,10 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
 
           <button
             type="button"
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setErrorMsg(null);
+              setShowModal(true);
+            }}
             className="px-4 py-2.5 bg-[#174C36] hover:bg-[#113A29] text-white rounded-[14px] text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-sm self-start sm:self-auto whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -106,12 +119,10 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
             ))}
           </div>
         ) : requests.length === 0 ? (
-          <div className="mt-7 pt-8 pb-6 border-t border-[#174C36]/10 text-center space-y-2">
-            <div className="text-sm font-semibold text-[#202820]">
-              No active workforce requests in your mandal
-            </div>
+          <div className="mt-7 pt-10 pb-8 border-t border-[#174C36]/10 text-center space-y-2">
+            <div className="text-sm font-semibold text-[#202820]">No labour requests yet.</div>
             <p className="text-xs text-[#858D86]">
-              Post your harvesting, weeding, or transplantation requirements to notify nearby teams.
+              Post your harvesting, weeding, or transplantation requirements to list them here.
             </p>
           </div>
         ) : (
@@ -132,7 +143,9 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   <div className="mt-3 space-y-1.5 text-[#5D665E]">
                     <div className="flex items-center gap-1.5 text-[#202820] font-medium">
                       <span>{req.farmerName}</span>
-                      <span className="text-[#858D86]" aria-hidden="true">·</span>
+                      <span className="text-[#858D86]" aria-hidden="true">
+                        ·
+                      </span>
                       <span className="text-[#174C36] font-mono tabular-nums">{req.phone}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-[#5D665E]">
@@ -178,8 +191,15 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
               Post Farm Labour Request
             </h3>
             <p className="text-xs text-[#5D665E] mt-0.5 mb-6">
-              Broadcast your worker requirements to local farmer cooperatives and labour groups.
+              Enter your workforce requirement details.
             </p>
+
+            {errorMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-900 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -188,6 +208,7 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   <input
                     type="text"
                     required
+                    placeholder="Your name"
                     value={farmerName}
                     onChange={(e) => setFarmerName(e.target.value)}
                     className="w-full bg-white/80 border border-[#174C36]/15 rounded-[12px] p-2.5 font-medium text-[#202820]"
@@ -198,6 +219,7 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   <input
                     type="tel"
                     required
+                    placeholder="10-digit mobile"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     className="w-full bg-white/80 border border-[#174C36]/15 rounded-[12px] p-2.5 font-mono tabular-nums font-medium text-[#202820]"
@@ -211,6 +233,7 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   <input
                     type="text"
                     required
+                    placeholder="Village"
                     value={village}
                     onChange={(e) => setVillage(e.target.value)}
                     className="w-full bg-white/80 border border-[#174C36]/15 rounded-[12px] p-2.5 font-medium text-[#202820]"
@@ -221,6 +244,7 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   <input
                     type="text"
                     required
+                    placeholder="District"
                     value={district}
                     onChange={(e) => setDistrict(e.target.value)}
                     className="w-full bg-white/80 border border-[#174C36]/15 rounded-[12px] p-2.5 font-medium text-[#202820]"
@@ -277,7 +301,7 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   <label className="block font-semibold text-[#202820] mb-1">Daily Wage (₹)</label>
                   <input
                     type="number"
-                    min="300"
+                    min="200"
                     step="50"
                     required
                     value={dailyWage}
@@ -311,7 +335,7 @@ export const LabourNetwork: React.FC<LabourNetworkProps> = ({ currentLang }) => 
                   disabled={submitting}
                   className="px-5 py-2.5 bg-[#174C36] hover:bg-[#113A29] text-white font-semibold rounded-[12px] cursor-pointer disabled:opacity-50"
                 >
-                  {submitting ? 'Broadcasting...' : 'Publish Request'}
+                  {submitting ? 'Publishing...' : 'Publish Request'}
                 </button>
               </div>
             </form>

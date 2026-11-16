@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Send, Volume2, VolumeX, X, RefreshCw } from 'lucide-react';
 import { Language } from '../types';
+import { safeFetchJson } from '../utils/safeFetchJson';
 
 interface Message {
   sender: 'user' | 'assistant';
@@ -66,7 +67,7 @@ export const AgriAssistantModal: React.FC<AgriAssistantModalProps> = ({
     setLoading(true);
 
     try {
-      const res = await fetch('/api/assistant', {
+      const res = await safeFetchJson<any>('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,14 +77,27 @@ export const AgriAssistantModal: React.FC<AgriAssistantModalProps> = ({
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      const data = res.data;
+      if (res.ok && data?.success) {
         const botReply = data.reply || data.replyTe || data.replyEn || 'No response available.';
         setMessages((prev) => [
           ...prev,
           {
             sender: 'assistant',
             text: botReply,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: 'assistant',
+            text:
+              data?.error ||
+              (currentLang === 'te'
+                ? `AI సలహా సేవ అందుబాటులో లేదు (HTTP ${res.status}).`
+                : `AI advisor is currently unavailable (HTTP ${res.status}).`),
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           },
         ]);
@@ -137,7 +151,7 @@ export const AgriAssistantModal: React.FC<AgriAssistantModalProps> = ({
           'How to control Black Thrips in Chilli?',
           'Best fertilizer schedule for Paddy active tillering?',
           'Which high-yield crop requires least water in Rabi?',
-          'How much does drone spraying cost per acre?',
+          'What spray precautions apply in high wind?',
         ];
 
   return (
@@ -153,11 +167,11 @@ export const AgriAssistantModal: React.FC<AgriAssistantModalProps> = ({
               <div className="font-bold text-sm font-display flex items-center gap-2">
                 <span>రైతు నేస్తం AI (Rythu Nestham)</span>
                 <span className="text-[10px] font-mono bg-white/15 px-2 py-0.5 rounded-lg text-[#DDEDE2]">
-                  ANGRAU & ICAR
+                  Gemini AI
                 </span>
               </div>
               <div className="text-[11px] text-[#DDEDE2]/85">
-                Contextual Telugu & English Agronomy Assistant
+                Contextual Telugu & English AI Advisory (Verify critical inputs locally)
               </div>
             </div>
           </div>

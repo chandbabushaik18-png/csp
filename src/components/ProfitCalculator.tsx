@@ -3,6 +3,7 @@ import { CheckCircle2, ArrowRight } from 'lucide-react';
 import { Language, ProfitResponse, RecommendedCrop } from '../types';
 import { translations } from '../translations';
 import { DataProvenanceBadge } from './DataProvenanceBadge';
+import { safeFetchJson } from '../utils/safeFetchJson';
 
 interface ProfitCalculatorProps {
   currentLang: Language;
@@ -79,7 +80,7 @@ export const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({
   const calculateProfit = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/profit', {
+      const res = await safeFetchJson<ProfitResponse>('/api/profit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -95,9 +96,8 @@ export const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({
           expectedPricePerQuintal,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setProfitData(data);
+      if (res.ok && res.data) {
+        setProfitData(res.data);
       }
     } catch (e) {
       console.error('Profit calculation failed:', e);
@@ -391,29 +391,27 @@ export const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({
               </div>
             </div>
 
-            {/* Smart Optimization Recommendations */}
+            {/* Planning Notes */}
             <div className="lg:col-span-5 glass-panel rounded-[24px] p-6 flex flex-col justify-between">
               <div>
                 <h3 className="text-base font-bold text-[#202820] font-display">
-                  Cost Reduction Opportunities
+                  Budgeting & Input Planning Notes
                 </h3>
                 <div className="mt-4 space-y-3 text-xs">
                   <div className="p-4 bg-[#DDEDE2]/45 rounded-[18px] border border-[#4D966B]/20">
                     <div className="font-bold text-[#174C36] flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-[#4D966B]" />
-                      <span>Agri Drone Spraying Efficiency</span>
+                      <span>User-Editable Financial Assumptions</span>
                     </div>
                     <div className="text-[#202820] mt-1 leading-relaxed">
-                      Drone spraying cuts manual spraying labour from ₹1,200 to ₹550/acre and saves
-                      35% on chemical run-off.
+                      Totals are calculated directly from the input costs, expected yield, and price values you enter above. Adjust each line item to match local mandi rates and input bills.
                     </div>
                   </div>
 
                   <div className="p-4 bg-white/60 rounded-[18px] border border-white/80">
-                    <div className="font-semibold text-[#202820]">Split Urea & Biofertilizers</div>
+                    <div className="font-semibold text-[#202820]">Precision Input Scheduling</div>
                     <div className="text-[#5D665E] mt-1 leading-relaxed">
-                      Applying bio-fertilizers (Azospirillum & PSB) reduces chemical fertilizer cost
-                      by ₹2,200 per acre.
+                      Split-application of urea, soil-test-based potash/phosphorus dosing, and timely pest scouting help avoid unnecessary chemical expenditure.
                     </div>
                   </div>
                 </div>
@@ -424,7 +422,7 @@ export const ProfitCalculator: React.FC<ProfitCalculatorProps> = ({
                 onClick={onBookDrone}
                 className="mt-6 w-full py-3 bg-[#174C36] hover:bg-[#113A29] text-white text-xs font-semibold rounded-[14px] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
-                <span>Book Drone Spraying to Save Costs</span>
+                <span>Request Spraying Service Quote</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

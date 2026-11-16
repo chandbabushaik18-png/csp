@@ -1,24 +1,34 @@
 export type Language = 'en' | 'te';
 
 /**
- * Central Data Integrity & Provenance Classification
- * Strict rule: Never represent estimated or demo information as real measurements.
+ * Standardized 3-State Data Integrity Classification
+ * - LIVE_DATA: Retrieved from an active external API, GPS hardware, or connected IoT sensor
+ * - UNAVAILABLE: Service failed, timed out, or required API credentials are not configured
+ * - NO_DATA: No observation, booking, or connected hardware telemetry exists yet
  */
+export type DataIntegrityState = 'LIVE_DATA' | 'UNAVAILABLE' | 'NO_DATA';
+
 export type DataClassification =
+  | 'LIVE_DATA'
+  | 'UNAVAILABLE'
+  | 'NO_DATA'
   | 'REAL_API_DATA'
   | 'REAL_GPS_DATA'
   | 'REAL_HARDWARE_SENSOR_DATA'
-  | 'CALCULATED_DATA'
-  | 'ESTIMATED_DATA'
-  | 'DEMO_DATA';
+  | 'CALCULATED_DATA';
 
 export interface DataProvenance {
+  integrityState?: DataIntegrityState;
   classification: DataClassification;
   source: string;
   timestamp: string;
   isRealTime: boolean;
+  isModelEstimate?: boolean;
+  observationDate?: string;
+  locationLabel?: string;
   notes?: string;
   methodology?: string;
+  groundingSources?: Array<{ title: string; uri: string }>;
 }
 
 export interface FarmProfile {
@@ -37,7 +47,11 @@ export interface FarmProfile {
   soilType: string;
   soilPh: number;
   currentCrop: string;
-  cropStage: 'Initial (Germination)' | 'Vegetative (Tillering/Branching)' | 'Mid-Season (Flowering/Fruiting)' | 'Late-Season (Ripening/Harvest)';
+  cropStage:
+    | 'Initial (Germination)'
+    | 'Vegetative (Tillering/Branching)'
+    | 'Mid-Season (Flowering/Fruiting)'
+    | 'Late-Season (Ripening/Harvest)';
   irrigationMethod: 'Drip' | 'Sprinkler' | 'Flood / Furrow' | 'Rainfed';
   waterSource: 'Borewell' | 'Canal' | 'Farm Pond' | 'Rainfed';
   lastUpdated: string;
@@ -59,6 +73,7 @@ export interface GeocodingResult {
 
 export interface WeatherData {
   success: boolean;
+  integrityState?: DataIntegrityState;
   source: string;
   lastUpdated: string;
   generationTimeMs?: number;
@@ -125,15 +140,16 @@ export interface WeatherData {
 
 export interface WaterAdvisoryData {
   success?: boolean;
+  integrityState?: DataIntegrityState;
   crop: string;
   cropStage: string;
   soilType: string;
   irrigationMethod: string;
   areaAcres: number;
-  et0_mm: number; // Reference Evapotranspiration from real weather
-  kc: number; // FAO-56 Crop coefficient
-  etc_mm: number; // Crop Evapotranspiration
-  effectiveRain_mm: number; // Infiltrating precipitation via USDA-SCS
+  et0_mm: number;
+  kc: number;
+  etc_mm: number;
+  effectiveRain_mm: number;
   netWaterNeed_mm: number;
   grossWaterNeed_mm: number;
   dailyLitersPerAcre: number;
@@ -164,59 +180,110 @@ export interface WaterAdvisoryData {
 
 export interface SentinelScene {
   id: string;
-  platform: string; // e.g., 'Sentinel-2B'
+  platform: string;
   constellation: string;
   acquisitionDate: string;
   processedDate: string;
   cloudCoveragePercent: number;
-  sunElevationDeg: number;
-  sunAzimuthDeg: number;
+  sunElevationDeg: number | null;
+  sunAzimuthDeg: number | null;
   tileId: string;
   utmZone?: string;
   bandsAvailable: string[];
-  previewUrl?: string;
+  previewUrl?: string | null;
+}
+
+export interface GeeStatusResponse {
+  configured: boolean;
+  ready: boolean;
+  invalidFormat?: boolean;
+  integrityState: DataIntegrityState;
+  status: 'READY' | 'CREDENTIALS_MISSING' | 'AUTH_OR_API_ERROR';
+  dataset?: string;
+  datasetId: string;
+  projectId: string | null;
+  clientEmailMasked?: string | null;
+  missingVars?: string[];
+  error?: string;
+  message?: string;
+  timestamp: string;
 }
 
 export interface SatelliteAnalysis {
   success?: boolean;
+  integrityState: DataIntegrityState;
   farmId: string;
   satelliteSource: string;
-  sceneId: string;
-  platform: string;
-  acquisitionDate: string;
-  processedDate: string;
-  cloudCoveragePercent: number;
-  sunElevationDeg?: number;
-  meanNdvi: number;
-  meanNdwi: number;
-  indexFormulas: {
-    ndvi: string; // '(B8 - B4) / (B8 + B4)'
-    ndwi: string; // '(B3 - B8) / (B3 + B8)'
+  datasetId?: string;
+  geeConfigured?: boolean;
+  geeStatus?: 'READY' | 'CREDENTIALS_MISSING' | 'AUTH_OR_API_ERROR';
+  geeError?: string;
+  geometryUsed?: 'drawn_polygon' | 'center_buffer';
+  dateRange?: {
+    startDate: string;
+    endDate: string;
+    maxCloudCover: number;
   };
-  healthClassification: 'Vigorous / Healthy' | 'Moderate Growth' | 'Crop Stress' | 'Fallow / Bare Soil';
-  healthClassificationTe: string;
+  sceneId: string | null;
+  platform: string | null;
+  acquisitionDate: string | null;
+  processedDate: string | null;
+  cloudCoveragePercent: number | null;
+  sunElevationDeg?: number | null;
+  previewUrl?: string | null;
+  tileUrls?: {
+    ndvi?: string | null;
+    ndwi?: string | null;
+    evi?: string | null;
+    trueColor?: string | null;
+  } | null;
+  pixelAnalysisSupported: boolean;
+  meanNdvi: number | null;
+  minNdvi?: number | null;
+  maxNdvi?: number | null;
+  stdDevNdvi?: number | null;
+  meanNdwi: number | null;
+  minNdwi?: number | null;
+  maxNdwi?: number | null;
+  stdDevNdwi?: number | null;
+  meanEvi?: number | null;
+  minEvi?: number | null;
+  maxEvi?: number | null;
+  stdDevEvi?: number | null;
+  meanSavi?: number | null;
+  minSavi?: number | null;
+  maxSavi?: number | null;
+  stdDevSavi?: number | null;
+  validPixelCount?: number | null;
+  indexFormulas: {
+    ndvi: string;
+    ndwi: string;
+    evi?: string;
+    savi?: string;
+  };
+  healthClassification: string | null;
+  healthClassificationTe?: string | null;
   areaBreakdown: {
     healthyVegetationPercent: number;
     moderateVegetationPercent: number;
     cropStressPercent: number;
     bareSoilPercent: number;
     waterBodiesPercent: number;
-  };
-  thresholdsUsed: {
-    healthyMin: number;
-    moderateMin: number;
-    lowMin: number;
-    waterNdwiMin: number;
-  };
+  } | null;
   stressHotspotsCount: number;
+  message?: string;
   recommendation: string;
   recommendationTe: string;
   provenance: DataProvenance;
   recentScenes?: SentinelScene[];
   historicalTrend: Array<{
     date: string;
+    isoDate?: string;
+    sceneId?: string;
     ndvi: number;
     ndwi: number;
+    evi?: number;
+    savi?: number;
     cloudPercent: number;
   }>;
 }
@@ -277,14 +344,22 @@ export interface DailyActivity {
 }
 
 export interface LeafDiagnosisResult {
-  diseaseName: string;
-  diseaseNameTe: string;
-  confidencePercent: number;
-  severity: 'Low' | 'Moderate' | 'Severe';
-  symptoms: string;
+  isPlantImage: boolean;
+  isClearImage: boolean;
+  identified: boolean;
+  detectedCrop: string;
+  diseaseOrPest: string;
+  diseaseOrPestTe: string;
+  confidencePercent: number | null;
+  severity: 'None' | 'Low' | 'Moderate' | 'Severe' | 'Unknown';
+  clarityFeedback?: string;
+  visualSymptoms: string;
+  recommendedNextSteps: string[];
   organicRemedy: string;
   chemicalRemedy: string;
   preventiveMeasures: string;
+  analyzedAt?: string;
+  engine?: string;
   provenance?: DataProvenance;
 }
 
@@ -324,11 +399,9 @@ export interface DroneBooking {
   village: string;
   mandal: string;
   district: string;
-  status: 'Confirmed' | 'Dispatched' | 'Completed';
+  status: 'Requested' | 'Confirmed' | 'Dispatched' | 'Completed';
   cost: number;
   droneModel: string;
-  operatorName: string;
-  operatorPhone: string;
   createdAt: string;
 }
 
@@ -344,10 +417,11 @@ export interface MarketPrice {
   change: string;
   trend: 'up' | 'down' | 'stable';
   unit: string;
-  msp: number; // Minimum Support Price benchmark
-  arrivals: string;
+  msp?: number;
+  arrivals?: string;
   asOfDate: string;
   provenance: DataProvenance;
+  groundingSources?: Array<{ title: string; uri: string }>;
 }
 
 export interface LabourRequest {
@@ -403,10 +477,10 @@ export interface IotTelemetrySnapshot {
 
 export interface IotDeviceStatus {
   connected: boolean;
+  integrityState?: DataIntegrityState;
   lastHeartbeat: string | null;
   timeoutSeconds: number;
   pumpRelayActive: boolean;
-  simulationModeRecommended: boolean;
   latestTelemetry: IotTelemetrySnapshot | null;
   telemetryHistory: IotTelemetrySnapshot[];
   provenance: DataProvenance;
@@ -431,4 +505,3 @@ export interface ToastMessage {
   description?: string;
   variant: 'success' | 'info' | 'warning' | 'error';
 }
-

@@ -28,6 +28,7 @@ import { CommunityForum } from './components/CommunityForum';
 import { AgriAssistantModal } from './components/AgriAssistantModal';
 import { ToastContainer } from './components/ToastContainer';
 import { Footer } from './components/Footer';
+import { safeFetchJson } from './utils/safeFetchJson';
 
 import {
   AppNotification,
@@ -55,88 +56,48 @@ import {
   Camera,
   LayoutGrid,
   Plane,
-  Cpu,
   Users,
   DollarSign,
   MessageSquare,
+  ShieldCheck,
 } from 'lucide-react';
 
-const INITIAL_FARM: FarmProfile = {
-  id: 'farm-001',
-  name: 'Venkata Subba Rao Farmland',
-  center: [16.4258, 80.5614],
-  boundary: [
-    [16.427, 80.56],
-    [16.4272, 80.563],
-    [16.4245, 80.5632],
-    [16.4243, 80.5602],
-  ],
-  areaAcres: 3.2,
-  areaHectares: 1.3,
-  village: 'Pedavadlapudi',
-  mandal: 'Mangalagiri',
+const DEFAULT_FARM: FarmProfile = {
+  id: 'farm-default',
+  name: 'Primary Farm Plot',
+  center: [16.3067, 80.4365],
+  boundary: [],
+  areaAcres: 1.0,
+  areaHectares: 0.4,
+  village: 'Guntur Region',
+  mandal: 'Guntur',
   district: 'Guntur',
   state: 'Andhra Pradesh',
   soilType: 'Black Cotton Soil (నల్లరేగడి నేల)',
   soilPh: 7.2,
-  currentCrop: 'Chilli (మిర్చి - తేజ)',
+  currentCrop: 'Chilli (మిర్చి)',
   cropStage: 'Mid-Season (Flowering/Fruiting)',
   irrigationMethod: 'Drip',
   waterSource: 'Borewell',
   lastUpdated: new Date().toISOString(),
+  provenance: {
+    integrityState: 'NO_DATA',
+    classification: 'NO_DATA',
+    source: 'Default Regional Coordinates (Select GPS or Map Location)',
+    timestamp: new Date().toISOString(),
+    isRealTime: false,
+    locationLabel: 'Guntur Region, Guntur',
+  },
 };
 
-const SAMPLE_SAVED_FARMS: FarmProfile[] = [
-  INITIAL_FARM,
-  {
-    id: 'farm-002',
-    name: 'Tenali Paddy Plot 4B',
-    center: [16.2435, 80.6401],
-    boundary: [
-      [16.2445, 80.639],
-      [16.2447, 80.6415],
-      [16.2425, 80.6418],
-      [16.2423, 80.6392],
-    ],
-    areaAcres: 4.5,
-    areaHectares: 1.82,
-    village: 'Angalakuduru',
-    mandal: 'Tenali',
-    district: 'Guntur',
-    state: 'Andhra Pradesh',
-    soilType: 'Alluvial Delta Soil (ఒండ్రు నేల)',
-    soilPh: 6.8,
-    currentCrop: 'Paddy (వరి - BPT 5204)',
-    cropStage: 'Vegetative (Tillering/Branching)',
-    irrigationMethod: 'Flood / Furrow',
-    waterSource: 'Canal',
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: 'farm-003',
-    name: 'Warangal Cotton Field',
-    center: [17.9689, 79.5941],
-    boundary: [
-      [17.97, 79.593],
-      [17.9705, 79.596],
-      [17.9675, 79.5962],
-      [17.9672, 79.5932],
-    ],
-    areaAcres: 5.0,
-    areaHectares: 2.02,
-    village: 'Dharmasagar',
-    mandal: 'Dharmasagar',
-    district: 'Hanamkonda',
-    state: 'Telangana',
-    soilType: 'Red Sandy Loam (ఎర్ర నేల)',
-    soilPh: 6.5,
-    currentCrop: 'Cotton (ప్రత్తి - Bt-2)',
-    cropStage: 'Mid-Season (Flowering/Fruiting)',
-    irrigationMethod: 'Drip',
-    waterSource: 'Borewell',
-    lastUpdated: new Date().toISOString(),
-  },
-];
+const LEGACY_DEMO_FARM_IDS = new Set(['farm-001', 'farm-002', 'farm-003']);
+
+function isLegacyDemoFarm(farm: any): boolean {
+  if (!farm || typeof farm !== 'object') return true;
+  if (LEGACY_DEMO_FARM_IDS.has(farm.id)) return true;
+  if (farm.name === 'Venkata Subba Rao Farmland') return true;
+  return false;
+}
 
 export default function App() {
   const [currentLang, setCurrentLang] = useState<Language>('en');
@@ -145,25 +106,42 @@ export default function App() {
   const [currentFarm, setCurrentFarm] = useState<FarmProfile>(() => {
     try {
       const stored = localStorage.getItem('fn_current_farm');
-      return stored ? JSON.parse(stored) : INITIAL_FARM;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (!isLegacyDemoFarm(parsed)) return parsed;
+      }
+      return DEFAULT_FARM;
     } catch {
-      return INITIAL_FARM;
+      return DEFAULT_FARM;
     }
   });
 
   const [savedFarms, setSavedFarms] = useState<FarmProfile[]>(() => {
     try {
       const stored = localStorage.getItem('fn_saved_farms');
-      return stored ? JSON.parse(stored) : SAMPLE_SAVED_FARMS;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((f) => !isLegacyDemoFarm(f));
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+      return [DEFAULT_FARM];
     } catch {
-      return SAMPLE_SAVED_FARMS;
+      return [DEFAULT_FARM];
     }
   });
 
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
-  const [marketPrices, setMarketPrices] = useState<MarketPrice[]>([]);
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
+  const [marketPrices, setMarketPrices] = useState<MarketPrice[]>([]);
+  const [marketMessage, setMarketMessage] = useState<string | null>(null);
+
   const [waterAdvisory, setWaterAdvisory] = useState<WaterAdvisoryData | null>(null);
+  const [waterError, setWaterError] = useState<string | null>(null);
+
   const [satelliteData, setSatelliteData] = useState<SatelliteAnalysis | null>(null);
   const [iotStatus, setIotStatus] = useState<IotDeviceStatus | null>(null);
 
@@ -172,7 +150,7 @@ export default function App() {
 
   const [selectedCropForProfit, setSelectedCropForProfit] = useState<RecommendedCrop | null>(null);
   const [selectedAcresForProfit, setSelectedAcresForProfit] = useState<number>(
-    currentFarm.areaAcres || 3
+    currentFarm.areaAcres || 1
   );
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -215,52 +193,80 @@ export default function App() {
     }
   }, [savedFarms]);
 
-  const loadWeather = async (district: string, lat?: number, lon?: number) => {
-    setWeatherLoading(true);
-    try {
-      let url = `/api/weather?city=${encodeURIComponent(district)}`;
-      if (lat && lon) {
-        url += `&lat=${lat}&lon=${lon}`;
+  const loadWeather = useCallback(
+    async (district?: string, lat?: number, lon?: number) => {
+      const targetLat = lat ?? currentFarm.center?.[0];
+      const targetLon = lon ?? currentFarm.center?.[1];
+      const targetCity = district || currentFarm.village || currentFarm.district || '';
+
+      if (!Number.isFinite(targetLat) || !Number.isFinite(targetLon)) {
+        setWeatherError('Valid farm latitude and longitude are required before fetching weather.');
+        return;
       }
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
+
+      setWeatherLoading(true);
+      setWeatherError(null);
+      try {
+        const url = `/api/weather?lat=${encodeURIComponent(String(targetLat))}&lon=${encodeURIComponent(
+          String(targetLon)
+        )}&city=${encodeURIComponent(targetCity)}`;
+        const { ok, status, data } = await safeFetchJson<WeatherData & { error?: string }>(url);
+
+        if (!ok || !data?.success) {
+          setWeatherData(null);
+          setWeatherError(data?.error || `Unable to retrieve weather forecast (HTTP ${status}).`);
+          return;
+        }
         setWeatherData(data);
+        setWeatherError(null);
+      } catch (err: any) {
+        setWeatherData(null);
+        setWeatherError(err?.message || 'Network error while connecting to weather service.');
+      } finally {
+        setWeatherLoading(false);
       }
-    } catch (err) {
-      console.error('Failed to load weather:', err);
-    } finally {
-      setWeatherLoading(false);
-    }
-  };
+    },
+    [currentFarm.center, currentFarm.village, currentFarm.district]
+  );
 
-  const loadWaterAdvisory = async (farm: FarmProfile) => {
-    try {
-      const res = await fetch('/api/water-advisory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          crop: farm.currentCrop,
-          cropStage: farm.cropStage,
-          soilType: farm.soilType,
-          irrigationMethod: farm.irrigationMethod,
-          areaAcres: farm.areaAcres,
-          lat: farm.center[0],
-          lon: farm.center[1],
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
+  const loadWaterAdvisory = useCallback(
+    async (farm: FarmProfile, connectedMoisture?: number) => {
+      setWaterError(null);
+      try {
+        const { ok, status, data } = await safeFetchJson<WaterAdvisoryData & { error?: string }>(
+          '/api/water-advisory',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              crop: farm.currentCrop,
+              cropStage: farm.cropStage,
+              soilType: farm.soilType,
+              irrigationMethod: farm.irrigationMethod,
+              areaAcres: farm.areaAcres,
+              lat: farm.center[0],
+              lon: farm.center[1],
+              soilMoisturePercent: connectedMoisture,
+            }),
+          }
+        );
+        if (!ok || !data?.success) {
+          setWaterAdvisory(null);
+          setWaterError(data?.error || `Water calculation unavailable (HTTP ${status}).`);
+          return;
+        }
         setWaterAdvisory(data);
+      } catch (err: any) {
+        setWaterAdvisory(null);
+        setWaterError(err?.message || 'Network error while fetching water advisory.');
       }
-    } catch (err) {
-      console.error('Failed to load water advisory:', err);
-    }
-  };
+    },
+    []
+  );
 
-  const loadSatelliteData = async (farm: FarmProfile) => {
+  const loadSatelliteData = useCallback(async (farm: FarmProfile) => {
     try {
-      const res = await fetch('/api/satellite/analyze', {
+      const { data } = await safeFetchJson<SatelliteAnalysis>('/api/satellite/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -271,56 +277,110 @@ export default function App() {
           areaAcres: farm.areaAcres,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (data) {
         setSatelliteData(data);
       }
-    } catch (err) {
-      console.error('Failed to load satellite data:', err);
-    }
-  };
-
-  const loadMarketPrices = async () => {
-    try {
-      const res = await fetch('/api/market-prices');
-      if (res.ok) {
-        const data = await res.json();
-        setMarketPrices(data.prices || []);
-      }
-    } catch (err) {
-      console.error('Failed to load market prices:', err);
-    }
-  };
-
-  const refreshIotStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/iot/status');
-      if (res.ok) {
-        const data = await res.json();
-        setIotStatus(data);
-      }
-    } catch (err) {
-      console.error('Failed to poll IoT hardware status:', err);
+    } catch {
+      // Handled gracefully inside SatelliteIntelligenceSection
     }
   }, []);
 
-  useEffect(() => {
-    if (currentFarm) {
-      loadWeather(currentFarm.district, currentFarm.center[0], currentFarm.center[1]);
-      loadWaterAdvisory(currentFarm);
-      loadSatelliteData(currentFarm);
-      setSelectedAcresForProfit(currentFarm.areaAcres || 3);
-    }
-  }, [currentFarm.id, currentFarm.center[0], currentFarm.center[1], currentFarm.currentCrop]);
+  const [marketLoading, setMarketLoading] = useState(false);
 
+  const loadMarketPrices = useCallback(async (forceRefresh = false) => {
+    setMarketLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (currentFarm.district) params.set('district', currentFarm.district);
+      if (currentFarm.state) params.set('state', currentFarm.state);
+      if (forceRefresh) params.set('refresh', 'true');
+
+      const { ok, data } = await safeFetchJson<{
+        success?: boolean;
+        prices?: MarketPrice[];
+        message?: string;
+      }>(`/api/market-prices?${params.toString()}`);
+      if (ok && data?.success && Array.isArray(data.prices)) {
+        setMarketPrices(data.prices);
+        setMarketMessage(null);
+      } else {
+        setMarketPrices([]);
+        setMarketMessage(data?.message || 'Market data currently unavailable.');
+      }
+    } catch {
+      setMarketPrices([]);
+      setMarketMessage('Market data currently unavailable due to network error.');
+    } finally {
+      setMarketLoading(false);
+    }
+  }, [currentFarm.district, currentFarm.state]);
+
+  const refreshIotStatus = useCallback(async () => {
+    try {
+      const { ok, data } = await safeFetchJson<IotDeviceStatus>('/api/iot/status');
+      if (ok && data) {
+        setIotStatus(data);
+      } else {
+        setIotStatus((prev) =>
+          prev || {
+            connected: false,
+            integrityState: 'NO_DATA',
+            lastHeartbeat: null,
+            timeoutSeconds: 60,
+            pumpRelayActive: false,
+            latestTelemetry: null,
+            telemetryHistory: [],
+            provenance: {
+              integrityState: 'NO_DATA',
+              classification: 'NO_DATA',
+              source: 'ESP32 Hardware Gateway',
+              timestamp: new Date().toISOString(),
+              isRealTime: false,
+              notes: 'ESP32 hardware gateway did not return JSON telemetry.',
+            },
+          }
+        );
+      }
+    } catch {
+      // Transient network errors keep existing disconnected state without crashing console
+    }
+  }, []);
+
+  // Fetch farm-dependent feeds on startup and whenever selected farm or coordinates change
+  useEffect(() => {
+    const label = currentFarm.village || currentFarm.district;
+    loadWeather(label, currentFarm.center[0], currentFarm.center[1]);
+    loadWaterAdvisory(
+      currentFarm,
+      iotStatus?.connected ? iotStatus.latestTelemetry?.soilMoisturePercent : undefined
+    );
+    loadSatelliteData(currentFarm);
+    setSelectedAcresForProfit(currentFarm.areaAcres || 1);
+  }, [
+    currentFarm.id,
+    currentFarm.center[0],
+    currentFarm.center[1],
+    currentFarm.boundary.length,
+    currentFarm.currentCrop,
+    currentFarm.areaAcres,
+    currentFarm.irrigationMethod,
+  ]);
+
+  // Periodic weather refresh every 10 minutes + initial market/IoT checks
   useEffect(() => {
     loadMarketPrices();
     refreshIotStatus();
-    const timer = setInterval(refreshIotStatus, 15000);
-    return () => clearInterval(timer);
-  }, [refreshIotStatus]);
+    const iotTimer = setInterval(refreshIotStatus, 15000);
+    const weatherTimer = setInterval(() => {
+      loadWeather(currentFarm.village || currentFarm.district, currentFarm.center[0], currentFarm.center[1]);
+    }, 10 * 60 * 1000);
 
-  // Compute live actionable notifications from real weather, satellite, and IoT telemetry
+    return () => {
+      clearInterval(iotTimer);
+      clearInterval(weatherTimer);
+    };
+  }, [loadMarketPrices, refreshIotStatus, loadWeather, currentFarm.village, currentFarm.district, currentFarm.center]);
+
   const notifications: AppNotification[] = useMemo(() => {
     const list: AppNotification[] = [];
 
@@ -344,7 +404,7 @@ export default function App() {
         id: 'rain-forecast-high',
         title: `Rain Expected (${rainNext}% Chance)`,
         titleTe: `వర్ష సూచన (${rainNext}%)`,
-        message: 'Delay fertilizer top-dressing and skip scheduled morning pump run.',
+        message: 'Delay fertilizer top-dressing and verify pump schedule.',
         messageTe: 'వర్షం పడే అవకాశం ఉన్నందున ఎరువులు మరియు నీటి తడిని వాయిదా వేయండి.',
         severity: 'warning',
         category: 'water',
@@ -353,27 +413,13 @@ export default function App() {
       });
     }
 
-    if (satelliteData && satelliteData.stressHotspotsCount > 0) {
-      list.push({
-        id: `sat-stress-${satelliteData.sceneId}`,
-        title: `${satelliteData.stressHotspotsCount} Localized Canopy Stress Zone`,
-        titleTe: `${satelliteData.stressHotspotsCount} పంట ఒత్తిడి ప్రాంతాలు`,
-        message: `Sentinel-2 NDVI (${satelliteData.meanNdvi.toFixed(2)}) detected mild edge stress on ${satelliteData.acquisitionDate}.`,
-        messageTe: 'ఉపగ్రహ చిత్రాలలో పొలం అంచున పచ్చదనం తగ్గినట్లు గుర్తించబడింది.',
-        severity: 'info',
-        category: 'satellite',
-        timestamp: satelliteData.acquisitionDate,
-        targetTab: 'satellite',
-      });
-    }
-
     if (iotStatus && !iotStatus.connected) {
       list.push({
         id: 'iot-offline',
-        title: 'ESP32 Field Node Offline',
-        titleTe: 'IoT సెన్సార్ ఆఫ్‌లైన్‌లో ఉంది',
-        message: 'No live soil moisture heartbeat received. Use Simulation Mode to test pump logic.',
-        messageTe: 'లైవ్ సెన్సార్ డేటా లేదు. సిమ్యులేషన్ మోడ్‌తో పరీక్షించవచ్చు.',
+        title: 'ESP32 Sensor Not Connected',
+        titleTe: 'IoT సెన్సార్ కనెక్ట్ కాలేదు',
+        message: 'No live soil moisture telemetry received on /api/iot/telemetry.',
+        messageTe: 'లైవ్ సెన్సార్ డేటా అందుబాటులో లేదు.',
         severity: 'info',
         category: 'iot',
         timestamp: new Date().toISOString(),
@@ -385,7 +431,7 @@ export default function App() {
       ...item,
       read: readNotificationIds.includes(item.id),
     }));
-  }, [weatherData, satelliteData, iotStatus, readNotificationIds]);
+  }, [weatherData, iotStatus, readNotificationIds]);
 
   const handleMarkAllNotificationsRead = () => {
     setReadNotificationIds(notifications.map((n) => n.id));
@@ -406,21 +452,22 @@ export default function App() {
       return;
     }
 
-    addToast('Locating Farm Coordinates', 'Requesting high-accuracy GNSS lock...', 'info');
+    addToast('Locating Farm Coordinates', 'Requesting GNSS location lock...', 'info');
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
-        let village = 'Current Farm GPS Location';
+        let village = 'GPS Coordinates';
         let mandal = currentFarm.mandal;
         let district = currentFarm.district;
         let state = currentFarm.state;
         let fullAddress: string | undefined;
 
         try {
-          const res = await fetch(`/api/geocode/reverse?lat=${latitude}&lon=${longitude}`);
-          if (res.ok) {
-            const data = await res.json();
+          const { ok, data } = await safeFetchJson<any>(
+            `/api/geocode/reverse?lat=${latitude}&lon=${longitude}`
+          );
+          if (ok && data) {
             if (data.village) village = data.village;
             if (data.mandal) mandal = data.mandal;
             if (data.district) district = data.district;
@@ -435,8 +482,8 @@ export default function App() {
           ...currentFarm,
           center: [latitude, longitude],
           name: fullAddress
-            ? `${village} Farm`
-            : `GPS Farmland (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
+            ? `${village} Plot`
+            : `GPS Plot (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
           village,
           mandal,
           district,
@@ -445,22 +492,23 @@ export default function App() {
           gpsAccuracyMeters: Math.round(accuracy),
           lastUpdated: new Date().toISOString(),
           provenance: {
+            integrityState: 'LIVE_DATA',
             classification: 'REAL_GPS_DATA',
             source: `Device Geolocation Hardware (±${Math.round(accuracy)}m)`,
             timestamp: new Date().toISOString(),
             isRealTime: true,
-            notes: 'Obtained via W3C Geolocation API with GNSS coordinates.',
+            locationLabel: `${village}, ${district}`,
+            notes: 'Obtained via browser Geolocation API.',
           },
         };
         setCurrentFarm(updatedFarm);
         addToast(
           'GPS Lock Acquired',
-          `Centered on ${village}, ${district} (${latitude.toFixed(4)}, ${longitude.toFixed(4)}) ±${Math.round(accuracy)}m`,
+          `Centered on ${village}, ${district} (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
           'success'
         );
       },
-      (err) => {
-        console.warn('Geolocation denied:', err);
+      () => {
         addToast(
           'Location Access Declined',
           'Allow browser location permission or search your village manually on the farm map.',
@@ -473,7 +521,7 @@ export default function App() {
 
   const handleSelectFarm = (farm: FarmProfile) => {
     setCurrentFarm(farm);
-    addToast('Switched Active Parcel', `${farm.name} (${farm.village}) loaded.`, 'success');
+    addToast('Selected Farm Location', `${farm.name} (${farm.village || farm.district}) loaded.`, 'success');
   };
 
   const handleSaveFarm = (farm: FarmProfile) => {
@@ -487,7 +535,7 @@ export default function App() {
       }
       return [farm, ...prev];
     });
-    addToast('Farm Boundary Saved', `${farm.areaAcres.toFixed(2)} acres saved to profile.`, 'success');
+    addToast('Farm Boundary Saved', `${farm.areaAcres.toFixed(2)} acres saved to browser storage.`, 'success');
   };
 
   const handleOpenAssistant = (query?: string) => {
@@ -503,89 +551,95 @@ export default function App() {
 
   const handleDroneBooked = (booking: DroneBooking) => {
     addToast(
-      'Drone Mission Scheduled',
-      `${booking.serviceType} booked for ${booking.date} (${booking.timeSlot}).`,
+      'Drone Request Logged',
+      `${booking.serviceType} requested for ${booking.date} (${booking.timeSlot}).`,
       'success'
     );
   };
 
-  // Curated 6-card Apple Bento Intelligence Overview (Drone & IoT reside cleanly under Farm Services)
   const overviewModules = [
     {
       id: 'dashboard',
-      title: 'Farm Operations Overview',
+      title: 'Farm Operations Cockpit',
       titleTe: 'ప్రధాన పొలం డాష్‌బోర్డ్',
-      desc: 'Unified daily action plan combining irrigation schedules, spray safety, and APMC mandi rates.',
+      desc: 'Unified weather forecast, Sentinel-2 overpass status, water budget, and IoT node telemetry.',
       icon: LayoutGrid,
-      meta: 'Daily Cockpit',
+      meta: 'My Farm',
     },
     {
       id: 'location',
       title: 'Satellite Parcel Mapping',
-      titleTe: 'ఉపగ్రహ పొలం మ్యాప్ & సరిహద్దు',
-      desc: 'Draw exact field boundaries on high-res imagery with geodesic acreage & NDVI zoning overlays.',
+      titleTe: 'పొలం మ్యాప్ & సరిహద్దు',
+      desc: 'Search villages via OpenStreetMap, lock device GPS, and compute geodesic boundary acreage.',
       icon: MapPin,
       meta: 'WGS84 GIS',
     },
     {
       id: 'satellite',
-      title: 'Copernicus Sentinel-2 Analytics',
-      titleTe: 'ఉపగ్రహ రిమోట్ సెన్సింగ్ (NDVI)',
-      desc: '10m multispectral overpass scenes tracking NDVI vegetation vigor and NDWI canopy moisture.',
+      title: 'Copernicus Sentinel-2 Catalog',
+      titleTe: 'శాటిలైట్ ఇంటెలిజెన్స్',
+      desc: 'Query real AWS Earth-Search STAC passes, acquisition dates, cloud cover, and quicklook views.',
       icon: Satellite,
-      meta: '10m Multispectral',
+      meta: 'Periodic Pass',
     },
     {
       id: 'water',
       title: 'FAO-56 Water & Irrigation',
       titleTe: 'శాస్త్రీయ నీటి యాజమాన్యం',
-      desc: 'Evapotranspiration water budgeting with interactive root-zone moisture simulation and pump hours.',
+      desc: 'Calculate crop evapotranspiration (ETc) from live Open-Meteo ET0 and rainfall forecasts.',
       icon: Droplets,
       meta: 'ETc Hydrology',
     },
     {
       id: 'doctor',
-      title: 'AI Crop Doctor & Advisor',
-      titleTe: 'AI పంట వైద్యుడు & సిఫార్సులు',
-      desc: 'Upload leaf photos for instant Gemini Vision disease pathology and bilingual ANGRAU remedies.',
+      title: 'AI Crop Doctor',
+      titleTe: 'AI పంట వైద్యుడు',
+      desc: 'Upload your own crop foliage photograph for multimodal Gemini Vision analysis.',
       icon: Camera,
-      meta: 'Multimodal AI',
+      meta: 'Gemini Vision',
     },
     {
       id: 'weather',
-      title: 'Hyper-Local Weather & Spraying',
+      title: 'Open-Meteo Weather Forecast',
       titleTe: 'వాతావరణం & పిచికారీ విండో',
-      desc: 'Hourly wind velocity, rain risk, and evapotranspiration windows from your farm coordinates.',
+      desc: 'Model-based hourly and 7-day numerical forecast for wind, humidity, rain risk, and spraying.',
       icon: CloudSun,
-      meta: 'Open-Meteo Live',
+      meta: 'NWP Model',
     },
   ];
 
-  // Segmented Sub-Navigation Tabs for Grouped Sidebar Categories
+  // Segmented Sub-Navigation Tabs matching the 8-item hierarchy
   const navGroup = getNavGroup(activeTab);
   const subNavMap: Record<string, Array<{ id: string; label: string; icon: React.ElementType }>> = {
     dashboard: [
       { id: 'dashboard', label: t.navDashboard, icon: LayoutGrid },
       { id: 'location', label: t.navLocation, icon: MapPin },
     ],
-    satellite: [
-      { id: 'satellite', label: t.navSatellite, icon: Satellite },
+    doctor: [
       { id: 'doctor', label: t.navDoctor, icon: Camera },
       { id: 'crops', label: t.navCrops, icon: Sprout },
     ],
     drone: [
       { id: 'drone', label: t.navDrone, icon: Plane },
-      { id: 'iot', label: t.navIot, icon: Cpu },
-      { id: 'labour', label: t.navLabour, icon: Users },
-    ],
-    market: [
       { id: 'market', label: t.navMarket, icon: TrendingUp },
-      { id: 'profit', label: t.btnCalculateProfit, icon: DollarSign },
+      { id: 'profit', label: t.navProfit, icon: DollarSign },
+      { id: 'labour', label: t.navLabour, icon: Users },
       { id: 'community', label: t.navCommunity, icon: MessageSquare },
     ],
   };
 
   const activeSubTabs = subNavMap[navGroup];
+
+  const assistantFarmContext = useMemo(
+    () => ({
+      ...currentFarm,
+      weatherTemp: weatherData?.current.temp,
+      weatherCondition: weatherData?.current.description,
+      weatherWind: weatherData?.current.windSpeedKmh,
+      dailyLitersPerAcre: waterAdvisory?.dailyLitersPerAcre,
+    }),
+    [currentFarm, weatherData, waterAdvisory]
+  );
 
   return (
     <div className="min-h-screen bg-[#F5F6F3] text-[#202820] relative">
@@ -668,13 +722,22 @@ export default function App() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               >
-                {/* 1. OVERVIEW / HOME */}
+                {/* 1. OVERVIEW */}
                 {activeTab === 'home' && (
                   <div className="space-y-10">
                     <HeroSection
                       currentLang={currentLang}
                       farm={currentFarm}
                       weather={weatherData}
+                      weatherLoading={weatherLoading}
+                      weatherError={weatherError}
+                      onRetryWeather={() =>
+                        loadWeather(
+                          currentFarm.village || currentFarm.district,
+                          currentFarm.center[0],
+                          currentFarm.center[1]
+                        )
+                      }
                       satelliteData={satelliteData}
                       iotStatus={iotStatus}
                       onExplore={navigateTab}
@@ -703,7 +766,7 @@ export default function App() {
                             className="px-4 py-2.5 text-xs font-semibold text-white bg-[#174C36] hover:bg-[#113A29] rounded-[14px] transition-colors shadow-sm cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
                           >
                             <MapPin className="w-3.5 h-3.5" />
-                            <span>Open Farm Map</span>
+                            <span>Select Farm Location</span>
                           </button>
                           <button
                             type="button"
@@ -753,30 +816,40 @@ export default function App() {
                       </div>
                     </section>
 
-                    {/* Field Impact Proof & Rythu Nestham Consultation */}
+                    {/* Data Integrity Principles + Rythu Nestham AI Card */}
                     <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
                       <div className="lg:col-span-7 bg-[#174C36] text-white rounded-[26px] p-7 sm:p-9 flex flex-col justify-between shadow-lg">
-                        <div className="space-y-3">
-                          <div className="text-xs font-semibold text-[#DDEDE2] tracking-wide">
-                            Field Trial Evidence · Guntur District
+                        <div className="space-y-4">
+                          <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#DDEDE2] tracking-wide">
+                            <ShieldCheck className="w-4 h-4" />
+                            <span>Data Integrity & Source Transparency</span>
                           </div>
-                          <blockquote className="text-lg sm:text-xl font-medium leading-relaxed text-white">
-                            “Switching from broadcast urea to FarmersNeed FAO-56 drip timing and drone spraying reduced my Chilli pesticide spend from ₹14,000 to ₹7,800 across 3.2 acres while lifting output by 4 quintals.”
-                          </blockquote>
+                          <h3 className="text-xl sm:text-2xl font-bold font-display text-white">
+                            Every signal is labeled with its exact origin.
+                          </h3>
+                          <p className="text-xs sm:text-sm text-[#E9F2EC] leading-relaxed">
+                            FarmersNeed separates live external retrievals from offline hardware and unconfigured feeds—with zero fabricated metrics or placeholder scores.
+                          </p>
                         </div>
 
-                        <div className="pt-6 mt-6 border-t border-white/15 flex items-center gap-4">
-                          <img
-                            src="/src/assets/images/farmer_portrait_progressive_1794070591328.jpg"
-                            alt="Venkata Subba Rao, Chilli and Paddy Grower"
-                            className="w-12 h-12 rounded-[14px] object-cover border border-white/30"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div>
-                            <div className="font-bold text-sm text-white">Venkata Subba Rao</div>
-                            <div className="text-xs text-[#DDEDE2]">
-                              Progressive Farmer · Pedavadlapudi, Tenali Mandal
-                            </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-6 mt-6 border-t border-white/15 text-xs">
+                          <div className="p-3.5 rounded-2xl bg-white/10 border border-white/15">
+                            <div className="font-mono font-bold text-[#DDEDE2]">LIVE DATA</div>
+                            <p className="text-[11px] text-white/80 mt-1">
+                              Active Open-Meteo models, STAC catalog scenes, or connected ESP32 nodes.
+                            </p>
+                          </div>
+                          <div className="p-3.5 rounded-2xl bg-white/10 border border-white/15">
+                            <div className="font-mono font-bold text-amber-200">UNAVAILABLE</div>
+                            <p className="text-[11px] text-white/80 mt-1">
+                              Upstream failure, timeout, or missing API keys (such as Agmarknet).
+                            </p>
+                          </div>
+                          <div className="p-3.5 rounded-2xl bg-white/10 border border-white/15">
+                            <div className="font-mono font-bold text-white/90">NO DATA</div>
+                            <p className="text-[11px] text-white/80 mt-1">
+                              Disconnected hardware probes, empty logs, or uncomputed raster metrics.
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -787,10 +860,10 @@ export default function App() {
                             <Sparkles className="w-5 h-5" />
                           </div>
                           <h3 className="text-xl font-bold text-[#202820] font-display">
-                            Rythu Nestham Bilingual Agronomist
+                            Rythu Nestham AI Advisor
                           </h3>
                           <p className="text-xs sm:text-sm text-[#5D665E] leading-relaxed">
-                            Ask voice or text questions in Telugu or English with full awareness of your farm GPS, crop stage, live weather, and Sentinel-2 NDVI reading.
+                            Ask questions in Telugu or English grounded in your selected farm coordinates, crop stage, Open-Meteo weather forecast, and FAO-56 water calculations.
                           </p>
                         </div>
 
@@ -832,7 +905,16 @@ export default function App() {
                       currentLang={currentLang}
                       farm={currentFarm}
                       weather={weatherData}
+                      weatherError={weatherError}
+                      onRetryWeather={() =>
+                        loadWeather(
+                          currentFarm.village || currentFarm.district,
+                          currentFarm.center[0],
+                          currentFarm.center[1]
+                        )
+                      }
                       marketPrices={marketPrices}
+                      marketMessage={marketMessage}
                       waterAdvisory={waterAdvisory}
                       satelliteData={satelliteData}
                       iotStatus={iotStatus}
@@ -848,23 +930,12 @@ export default function App() {
                     currentLang={currentLang}
                     farm={currentFarm}
                     savedFarms={savedFarms}
-                    satelliteData={satelliteData}
                     onSelectFarm={handleSelectFarm}
                     onSaveFarm={handleSaveFarm}
                   />
                 )}
 
-                {/* 4. CROP INTELLIGENCE: SATELLITE */}
-                {activeTab === 'satellite' && (
-                  <SatelliteIntelligenceSection
-                    currentLang={currentLang}
-                    farm={currentFarm}
-                    onOpenDoctor={() => navigateTab('doctor')}
-                    onOpenAssistant={handleOpenAssistant}
-                  />
-                )}
-
-                {/* 5. CROP INTELLIGENCE: CROP DOCTOR */}
+                {/* 4. CROP INTELLIGENCE: AI CROP DOCTOR */}
                 {activeTab === 'doctor' && (
                   <CropDoctorSection
                     currentLang={currentLang}
@@ -874,7 +945,7 @@ export default function App() {
                   />
                 )}
 
-                {/* 6. CROP INTELLIGENCE: CROP RECOMMENDER */}
+                {/* 5. CROP INTELLIGENCE: CROP PLANNER */}
                 {activeTab === 'crops' && (
                   <CropRecommender
                     currentLang={currentLang}
@@ -884,7 +955,18 @@ export default function App() {
                   />
                 )}
 
-                {/* 7. WATER & IRRIGATION */}
+                {/* 6. SATELLITE INTELLIGENCE */}
+                {activeTab === 'satellite' && (
+                  <SatelliteIntelligenceSection
+                    currentLang={currentLang}
+                    farm={currentFarm}
+                    onNavigateLocation={() => navigateTab('location')}
+                    onAnalysisUpdate={setSatelliteData}
+                    onOpenDoctor={() => navigateTab('doctor')}
+                  />
+                )}
+
+                {/* 7. WATER MANAGEMENT */}
                 {activeTab === 'water' && (
                   <WaterManagementSection
                     currentLang={currentLang}
@@ -898,11 +980,13 @@ export default function App() {
                 {activeTab === 'weather' && (
                   <WeatherAdvisory
                     currentLang={currentLang}
+                    farm={currentFarm}
                     weather={weatherData}
                     loading={weatherLoading}
-                    onRefreshLocation={(district) =>
+                    error={weatherError}
+                    onRefreshLocation={() =>
                       loadWeather(
-                        district || currentFarm.district,
+                        currentFarm.village || currentFarm.district,
                         currentFarm.center[0],
                         currentFarm.center[1]
                       )
@@ -915,29 +999,23 @@ export default function App() {
                 {activeTab === 'drone' && (
                   <DroneBookingSection
                     currentLang={currentLang}
+                    farm={currentFarm}
                     onBookingSuccess={handleDroneBooked}
                   />
                 )}
 
-                {/* 10. FARM SERVICES: IOT HARDWARE CONSOLE */}
-                {activeTab === 'iot' && (
-                  <IotHardwareSection
+                {/* 10. FARM SERVICES: MARKET PRICES */}
+                {activeTab === 'market' && (
+                  <MarketPricesSection
                     currentLang={currentLang}
-                    iotStatus={iotStatus}
-                    onRefreshStatus={refreshIotStatus}
-                    onNotify={addToast}
+                    prices={marketPrices}
+                    loading={marketLoading}
+                    unavailableMessage={marketMessage}
+                    onRetry={() => loadMarketPrices(true)}
                   />
                 )}
 
-                {/* 11. FARM SERVICES: LABOUR NETWORK */}
-                {activeTab === 'labour' && <LabourNetwork currentLang={currentLang} />}
-
-                {/* 12. MARKET & FINANCE: MANDI PRICES */}
-                {activeTab === 'market' && (
-                  <MarketPricesSection currentLang={currentLang} prices={marketPrices} />
-                )}
-
-                {/* 13. MARKET & FINANCE: PROFIT CALCULATOR */}
+                {/* 11. FARM SERVICES: PROFIT CALCULATOR */}
                 {activeTab === 'profit' && (
                   <ProfitCalculator
                     currentLang={currentLang}
@@ -947,8 +1025,21 @@ export default function App() {
                   />
                 )}
 
-                {/* 14. MARKET & FINANCE: COMMUNITY FORUM */}
+                {/* 12. FARM SERVICES: LABOUR NETWORK */}
+                {activeTab === 'labour' && <LabourNetwork currentLang={currentLang} />}
+
+                {/* 13. FARM SERVICES: COMMUNITY FORUM */}
                 {activeTab === 'community' && <CommunityForum currentLang={currentLang} />}
+
+                {/* 14. IOT MONITORING */}
+                {activeTab === 'iot' && (
+                  <IotHardwareSection
+                    currentLang={currentLang}
+                    iotStatus={iotStatus}
+                    onRefreshStatus={refreshIotStatus}
+                    onNotify={addToast}
+                  />
+                )}
               </motion.div>
             </AnimatePresence>
           </main>
@@ -974,7 +1065,7 @@ export default function App() {
         onClose={() => setIsAssistantOpen(false)}
         currentLang={currentLang}
         initialQuery={assistantInitialQuery}
-        farmContext={currentFarm}
+        farmContext={assistantFarmContext}
       />
     </div>
   );

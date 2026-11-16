@@ -8,7 +8,6 @@ import {
   Droplets,
   CloudSun,
   Wrench,
-  TrendingUp,
   Bell,
   MapPin,
   Sparkles,
@@ -43,11 +42,20 @@ interface NavbarProps {
 export function getNavGroup(tab: string): string {
   if (tab === 'home') return 'home';
   if (tab === 'dashboard' || tab === 'location') return 'dashboard';
-  if (tab === 'satellite' || tab === 'doctor' || tab === 'crops') return 'satellite';
+  if (tab === 'doctor' || tab === 'crops') return 'doctor';
+  if (tab === 'satellite') return 'satellite';
   if (tab === 'water') return 'water';
   if (tab === 'weather') return 'weather';
-  if (tab === 'drone' || tab === 'iot' || tab === 'labour') return 'drone';
-  if (tab === 'market' || tab === 'profit' || tab === 'community') return 'market';
+  if (
+    tab === 'drone' ||
+    tab === 'market' ||
+    tab === 'profit' ||
+    tab === 'labour' ||
+    tab === 'community'
+  ) {
+    return 'drone';
+  }
+  if (tab === 'iot') return 'iot';
   return 'home';
 }
 
@@ -62,15 +70,19 @@ export const SidebarNavigation: React.FC<NavbarProps> = ({
   const t = translations[currentLang];
   const currentGroup = getNavGroup(activeTab);
 
+  // Clean 8-item Navigation Structure
   const navItems = [
     { id: 'home', label: t.navOverview, icon: Compass },
     { id: 'dashboard', label: t.navMyFarm, icon: LayoutGrid },
-    { id: 'satellite', label: t.navCropIntel, icon: Satellite },
+    { id: 'doctor', label: t.navCropIntel, icon: Sprout },
+    { id: 'satellite', label: t.navSatellite, icon: Satellite },
     { id: 'water', label: t.navWater, icon: Droplets },
     { id: 'weather', label: t.navWeather, icon: CloudSun },
     { id: 'drone', label: t.navServices, icon: Wrench },
-    { id: 'market', label: t.navMarketFinance, icon: TrendingUp },
+    { id: 'iot', label: t.navIot, icon: Cpu },
   ];
+
+  const iotLive = Boolean(iotStatus?.connected);
 
   return (
     <aside className="hidden lg:flex flex-col w-[248px] shrink-0 sticky top-4 h-[calc(100vh-2rem)] glass-sidebar rounded-[26px] p-4 justify-between">
@@ -115,7 +127,11 @@ export const SidebarNavigation: React.FC<NavbarProps> = ({
                     className="absolute inset-0 bg-[#174C36] rounded-[14px] shadow-[0_6px_16px_-4px_rgba(23,76,54,0.35)]"
                   />
                 )}
-                <Icon className={`w-4 h-4 relative z-10 shrink-0 ${isActive ? 'text-[#DDEDE2]' : 'text-[#4D966B]'}`} />
+                <Icon
+                  className={`w-4 h-4 relative z-10 shrink-0 ${
+                    isActive ? 'text-[#DDEDE2]' : 'text-[#4D966B]'
+                  }`}
+                />
                 <span className="relative z-10 truncate">{item.label}</span>
               </button>
             );
@@ -133,14 +149,14 @@ export const SidebarNavigation: React.FC<NavbarProps> = ({
         >
           <span className="flex items-center gap-2 font-semibold text-[#202820] truncate">
             <Cpu className="w-3.5 h-3.5 text-[#4D966B] shrink-0" />
-            <span className="truncate">IoT Sensor Node</span>
+            <span className="truncate">ESP32 Node</span>
           </span>
           <span
             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg shrink-0 ${
-              iotStatus?.connected ? 'bg-[#DDEDE2] text-[#174C36]' : 'bg-amber-100/80 text-amber-800'
+              iotLive ? 'bg-[#DDEDE2] text-[#174C36]' : 'bg-white/90 text-[#5D665E] border border-[#858D86]/25'
             }`}
           >
-            {iotStatus?.connected ? 'ONLINE' : 'OFFLINE'}
+            {iotLive ? 'LIVE DATA' : 'NO DATA'}
           </span>
         </button>
 
@@ -151,11 +167,11 @@ export const SidebarNavigation: React.FC<NavbarProps> = ({
           className="w-full p-3 rounded-[16px] bg-[#DDEDE2]/60 hover:bg-[#DDEDE2]/90 border border-[#4D966B]/15 text-left transition-colors cursor-pointer"
         >
           <div className="text-[10px] font-bold uppercase tracking-wider text-[#4D966B]">
-            Active Field
+            Selected Location
           </div>
           <div className="text-xs font-bold text-[#202820] truncate mt-0.5">{currentFarm.name}</div>
           <div className="text-[11px] text-[#5D665E] font-mono mt-0.5 truncate">
-            {currentFarm.areaAcres.toFixed(1)} Ac · {currentFarm.village}
+            {currentFarm.areaAcres.toFixed(1)} Ac · {currentFarm.village || currentFarm.district}
           </div>
         </button>
 
@@ -211,13 +227,12 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
   const mobileAllItems = [
     { id: 'home', label: t.navOverview, icon: Compass },
     { id: 'dashboard', label: t.navMyFarm, icon: LayoutGrid },
-    { id: 'location', label: t.navLocation, icon: MapPin },
-    { id: 'satellite', label: t.navCropIntel, icon: Satellite },
+    { id: 'doctor', label: t.navCropIntel, icon: Sprout },
+    { id: 'satellite', label: t.navSatellite, icon: Satellite },
     { id: 'water', label: t.navWater, icon: Droplets },
     { id: 'weather', label: t.navWeather, icon: CloudSun },
     { id: 'drone', label: t.navServices, icon: Wrench },
     { id: 'iot', label: t.navIot, icon: Cpu },
-    { id: 'market', label: t.navMarketFinance, icon: TrendingUp },
   ];
 
   return (
@@ -243,11 +258,15 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => setProfileOpen(!profileOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-xs transition-all cursor-pointer max-w-[230px] sm:max-w-xs"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-xs transition-all cursor-pointer max-w-[240px] sm:max-w-xs"
             >
               <MapPin className="w-3.5 h-3.5 text-[#174C36] shrink-0" />
-              <span className="font-semibold text-[#202820] truncate">{currentFarm.village}</span>
-              <span className="hidden md:inline text-[#858D86] truncate">· {currentFarm.currentCrop.split('(')[0].trim()}</span>
+              <span className="font-semibold text-[#202820] truncate">
+                {currentFarm.village || currentFarm.district}
+              </span>
+              <span className="hidden md:inline text-[#858D86] truncate">
+                · {currentFarm.currentCrop.split('(')[0].trim()}
+              </span>
               <ChevronDown className="w-3.5 h-3.5 text-[#858D86] shrink-0" />
             </button>
 
@@ -255,7 +274,7 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
               <div className="absolute left-0 mt-2 w-72 glass-panel-elevated rounded-[20px] p-2.5 z-50">
                 <div className="px-2.5 py-1.5 flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
-                    Saved Farm Parcels
+                    Farm Locations
                   </span>
                   <button
                     type="button"
@@ -286,8 +305,13 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
                       >
                         <div className="min-w-0">
                           <div className="font-semibold truncate">{farm.name}</div>
-                          <div className={`text-[10px] truncate ${selected ? 'text-[#DDEDE2]' : 'text-[#858D86]'}`}>
-                            {farm.village}, {farm.district} · {farm.areaAcres.toFixed(1)} Ac
+                          <div
+                            className={`text-[10px] truncate ${
+                              selected ? 'text-[#DDEDE2]' : 'text-[#858D86]'
+                            }`}
+                          >
+                            {farm.village ? `${farm.village}, ` : ''}
+                            {farm.district} · {farm.areaAcres.toFixed(1)} Ac
                           </div>
                         </div>
                         {selected && <Check className="w-3.5 h-3.5 shrink-0" />}
@@ -304,7 +328,7 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
                     }}
                     className="w-full py-2 text-xs font-semibold text-[#174C36] hover:bg-[#DDEDE2]/60 rounded-xl transition-colors cursor-pointer"
                   >
-                    Draw or Edit Farm Boundary →
+                    Open Farm Map & Draw Boundary →
                   </button>
                 </div>
               </div>
@@ -344,7 +368,7 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
               <div className="absolute right-0 mt-2 w-80 sm:w-96 glass-panel-elevated rounded-[22px] p-3 z-50">
                 <div className="px-2 py-1.5 flex items-center justify-between border-b border-[#174C36]/10 pb-2.5">
                   <span className="text-xs font-bold text-[#202820] font-display">
-                    Farm Intelligence Alerts
+                    Farm Advisories & Status
                   </span>
                   {unreadCount > 0 && (
                     <button
@@ -360,7 +384,7 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
                 <div className="max-h-72 overflow-y-auto space-y-1.5 mt-2">
                   {notifications.length === 0 ? (
                     <div className="py-6 text-center text-xs text-[#858D86]">
-                      All systems nominal across your farm.
+                      No active weather or sensor alerts.
                     </div>
                   ) : (
                     notifications.map((n) => {
@@ -448,10 +472,10 @@ export const TopGlassBar: React.FC<NavbarProps> = ({
       {/* Mobile Slide-Down Drawer */}
       {mobileMenuOpen && (
         <div className="lg:hidden mt-2 glass-panel-elevated rounded-[22px] p-4 space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {mobileAllItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = getNavGroup(activeTab) === item.id;
               return (
                 <button
                   key={item.id}
@@ -498,8 +522,8 @@ export const MobileBottomDock: React.FC<{
   const items = [
     { id: 'home', label: t.navOverview, icon: Compass },
     { id: 'dashboard', label: t.navMyFarm, icon: LayoutGrid },
-    { id: 'satellite', label: 'Crop AI', icon: Satellite },
-    { id: 'water', label: 'Water', icon: Droplets },
+    { id: 'doctor', label: 'Crop AI', icon: Sprout },
+    { id: 'weather', label: t.navWeather, icon: CloudSun },
     { id: 'drone', label: 'Services', icon: Wrench },
   ];
 

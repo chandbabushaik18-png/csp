@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Droplets,
   RefreshCw,
@@ -7,12 +7,13 @@ import {
   Sun,
   CloudRain,
   Calculator,
-  Sliders,
   Cpu,
+  AlertTriangle,
 } from 'lucide-react';
 import { FarmProfile, IotDeviceStatus, Language, WaterAdvisoryData } from '../types';
 import { translations } from '../translations';
 import { DataProvenanceBadge } from './DataProvenanceBadge';
+import { safeFetchJson } from '../utils/safeFetchJson';
 
 interface WaterManagementSectionProps {
   currentLang: Language;
@@ -30,18 +31,20 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
   const t = translations[currentLang];
 
   const [selectedCrop, setSelectedCrop] = useState<string>(farm.currentCrop || 'Chilli');
-  const [selectedStage, setSelectedStage] = useState<string>(farm.cropStage || 'Mid-Season (Flowering/Fruiting)');
-  const [selectedIrrigation, setSelectedIrrigation] = useState<string>(farm.irrigationMethod || 'Drip');
+  const [selectedStage, setSelectedStage] = useState<string>(
+    farm.cropStage || 'Mid-Season (Flowering/Fruiting)'
+  );
+  const [selectedIrrigation, setSelectedIrrigation] = useState<string>(
+    farm.irrigationMethod || 'Drip'
+  );
   const [soilType, setSoilType] = useState<string>(farm.soilType || 'Black Cotton Soil');
   const [pumpMotorHp, setPumpMotorHp] = useState<number>(5);
-  const [simulatedMoisture, setSimulatedMoisture] = useState<number>(48);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [waterData, setWaterData] = useState<WaterAdvisoryData | null>(null);
 
   const iotConnected = Boolean(iotStatus?.connected && iotStatus.latestTelemetry);
-  const effectiveMoisture = iotConnected
-    ? iotStatus!.latestTelemetry!.soilMoisturePercent
-    : simulatedMoisture;
+  const liveMoisture = iotConnected ? iotStatus!.latestTelemetry!.soilMoisturePercent : undefined;
 
   const pumpFlowRates: Record<number, number> = {
     3: 18000,
@@ -51,10 +54,11 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
   };
   const activeFlowRate = pumpFlowRates[pumpMotorHp] || 30000;
 
-  const fetchWaterAdvisory = async (moistureVal: number) => {
+  const fetchWaterAdvisory = useCallback(async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
-      const res = await fetch('/api/water-advisory', {
+      const res = await safeFetchJson<any>('/api/water-advisory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,45 +70,53 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
           lat: farm.center[0],
           lon: farm.center[1],
           pumpFlowRateLph: activeFlowRate,
-          soilMoisturePercent: moistureVal,
+          soilMoisturePercent: liveMoisture,
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setWaterData(data);
+      const data = res.data;
+      if (!res.ok || !data?.success) {
+        setWaterData(null);
+        setErrorMsg(
+          data?.error || `Failed to retrieve evapotranspiration budget (HTTP ${res.status}).`
+        );
+        return;
       }
-    } catch (e) {
-      console.error('Water advisory fetch error:', e);
+
+      setWaterData(data);
+    } catch (e: any) {
+      setWaterData(null);
+      setErrorMsg(e?.message || 'Network error while calculating FAO-56 water advisory.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchWaterAdvisory(effectiveMoisture);
-    }, 150);
-    return () => clearTimeout(timer);
   }, [
     selectedCrop,
     selectedStage,
-    selectedIrrigation,
     soilType,
+    selectedIrrigation,
     farm.areaAcres,
     farm.center,
-    pumpMotorHp,
-    effectiveMoisture,
+    activeFlowRate,
+    liveMoisture,
   ]);
 
-  const moistureZoneLabel =
-    effectiveMoisture < 30
-      ? 'Severe Moisture Deficit — Immediate Drip Run'
-      : effectiveMoisture < 50
-      ? 'Moderate Root-Zone Depletion — Standard Schedule'
-      : effectiveMoisture < 75
-      ? 'Optimal Soil Moisture — Reduced Pumping'
-      : 'Field Capacity / Saturated — Skip Irrigation';
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchWaterAdvisory();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [fetchWaterAdvisory]);
+
+  const moistureZoneLabel = !iotConnected
+    ? 'ESP32 Probe Not Connected'
+    : liveMoisture! < 30
+    ? 'Severe Moisture Deficit — Immediate Drip Run'
+    : liveMoisture! < 50
+    ? 'Moderate Root-Zone Depletion — Standard Schedule'
+    : liveMoisture! < 75
+    ? 'Optimal Soil Moisture — Reduced Pumping'
+    : 'Field Capacity / Saturated — Skip Irrigation';
 
   return (
     <div className="space-y-6 pb-8">
@@ -122,13 +134,13 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
               {t.waterTitle}
             </h2>
             <p className="text-xs sm:text-sm text-[#858D86] mt-1 max-w-2xl">
-              Calculates daily crop evapotranspiration (ETc = Kc × ET0), effective rainfall, root-zone moisture balance, and motor runtime.
+              {t.waterSub}
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() => fetchWaterAdvisory(effectiveMoisture)}
+            onClick={fetchWaterAdvisory}
             disabled={loading}
             className="px-4 py-2.5 bg-[#174C36] hover:bg-[#113A29] text-white rounded-[12px] text-xs font-semibold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 self-start md:self-auto"
           >
@@ -215,48 +227,60 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
         </div>
       </div>
 
-      {/* Interactive Soil Moisture Visualizer & Live Water-Level Tank */}
+      {errorMsg && (
+        <div className="glass-panel rounded-[22px] p-5 border border-amber-300/70 bg-amber-50/75 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+          <div className="flex items-start gap-3 text-amber-950">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold text-sm">Water Advisory Unavailable</div>
+              <p className="text-amber-900 mt-0.5">{errorMsg}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={fetchWaterAdvisory}
+            className="px-4 py-2 bg-[#174C36] text-white rounded-xl font-semibold flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
+      {/* Hardware Probe Status + Hydrological Outputs */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-5 glass-panel rounded-[24px] p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-bold text-[#202820]">
-                <Sliders className="w-4 h-4 text-[#4D966B]" />
-                <span>Interactive Soil Moisture Visualizer</span>
+                <Cpu className="w-4 h-4 text-[#4D966B]" />
+                <span>Physical Soil Moisture Sensor</span>
               </div>
               <span
                 className={`px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold ${
-                  iotConnected ? 'bg-[#DDEDE2] text-[#174C36]' : 'bg-amber-50 text-amber-800 border border-amber-200'
+                  iotConnected
+                    ? 'bg-[#DDEDE2] text-[#174C36]'
+                    : 'bg-white/85 text-[#5D665E] border border-[#858D86]/25'
                 }`}
               >
-                {iotConnected ? 'ESP32 LIVE' : 'SIMULATION SLIDER'}
+                {iotConnected ? 'LIVE DATA' : 'NO DATA'}
               </span>
             </div>
 
             <div className="mt-5 flex items-center gap-6">
-              {/* Animated Glass Water Level Column */}
               <div className="relative w-24 h-44 rounded-[20px] bg-white/70 border border-[#174C36]/15 overflow-hidden shrink-0 shadow-inner flex flex-col justify-end">
-                <div
-                  className="relative w-full transition-all duration-500 ease-out"
-                  style={{
-                    height: `${effectiveMoisture}%`,
-                    background: 'linear-gradient(180deg, #4D966B 0%, #174C36 100%)',
-                  }}
-                >
-                  <svg
-                    viewBox="0 0 200 18"
-                    preserveAspectRatio="none"
-                    className="absolute -top-3 left-0 w-[200%] h-4 animate-water-wave text-[#4D966B]"
-                  >
-                    <path
-                      fill="currentColor"
-                      d="M0,9 C30,18 70,0 100,9 C130,18 170,0 200,9 L200,18 L0,18 Z"
-                    />
-                  </svg>
-                </div>
+                {iotConnected && liveMoisture !== undefined && (
+                  <div
+                    className="relative w-full transition-all duration-500 ease-out"
+                    style={{
+                      height: `${liveMoisture}%`,
+                      background: 'linear-gradient(180deg, #4D966B 0%, #174C36 100%)',
+                    }}
+                  />
+                )}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="font-mono font-extrabold text-lg text-[#202820] bg-white/85 backdrop-blur-sm px-2 py-0.5 rounded-lg shadow-2xs">
-                    {effectiveMoisture}%
+                  <span className="font-mono font-extrabold text-sm text-[#202820] bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-2xs">
+                    {iotConnected ? `${liveMoisture}%` : 'NO DATA'}
                   </span>
                 </div>
               </div>
@@ -264,36 +288,23 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
               <div className="flex-1 space-y-3 text-xs">
                 <div>
                   <div className="text-[11px] font-semibold text-[#858D86] uppercase tracking-wider">
-                    Root-Zone Saturation
+                    Root-Zone Sensor Status
                   </div>
                   <div className="text-base font-bold text-[#174C36] font-display mt-0.5">
                     {moistureZoneLabel}
                   </div>
                 </div>
 
-                {!iotConnected ? (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between font-mono text-[11px] text-[#5D665E]">
-                      <span>Dry (0%)</span>
-                      <span>Adjust Moisture</span>
-                      <span>Wet (100%)</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={5}
-                      max={95}
-                      value={simulatedMoisture}
-                      onChange={(e) => setSimulatedMoisture(Number(e.target.value))}
-                      className="w-full accent-[#174C36] cursor-pointer"
-                    />
-                    <p className="text-[11px] text-[#858D86]">
-                      Move slider to observe real-time effect on FAO-56 irrigation volume & pump hours (ESP32 disconnected).
-                    </p>
-                  </div>
-                ) : (
+                {iotConnected ? (
                   <div className="p-3 rounded-xl bg-[#DDEDE2]/70 text-[#174C36] flex items-center gap-2">
                     <Cpu className="w-4 h-4 shrink-0" />
-                    <span>Reading directly from connected ESP32 node ({iotStatus?.latestTelemetry?.deviceId}).</span>
+                    <span>
+                      Reading directly from connected ESP32 node ({iotStatus?.latestTelemetry?.deviceId}).
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-xl bg-white/75 border border-[#174C36]/10 text-[#5D665E] leading-relaxed">
+                    ESP32 soil probe is not connected. Irrigation demand is computed purely from Open-Meteo reference evapotranspiration (ET0), crop coefficient (Kc), and rainfall forecasts.
                   </div>
                 )}
               </div>
@@ -309,18 +320,21 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
                 <div className="flex items-center justify-between border-b border-[#174C36]/10 pb-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-[#174C36]">
                     <Calculator className="w-4 h-4 text-[#4D966B]" />
-                    <span>Live Mathematical Derivation (FAO-56)</span>
+                    <span>FAO-56 Water Balance Derivation</span>
                   </div>
                   <span className="text-[11px] font-mono text-[#858D86]">
-                    {farm.center[0].toFixed(3)}°N · Multiplier ×{waterData.soilMoistureAdjustmentFactor ?? 1}
+                    {farm.center[0].toFixed(3)}°N, {farm.center[1].toFixed(3)}°E
+                    {waterData.soilMoistureAdjustmentFactor !== undefined
+                      ? ` · Probe Mult ×${waterData.soilMoistureAdjustmentFactor}`
+                      : ''}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
                   <div className="p-3.5 rounded-2xl bg-white/80 border border-white">
-                    <div className="text-[#858D86] text-[10px]">1. Live ET0</div>
+                    <div className="text-[#858D86] text-[10px]">1. Open-Meteo ET0</div>
                     <div className="text-lg font-bold text-[#202820] mt-1">{waterData.et0_mm} mm</div>
-                    <div className="text-[10px] text-[#4D966B]">Open-Meteo</div>
+                    <div className="text-[10px] text-[#4D966B]">NWP Model</div>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-white/80 border border-white">
                     <div className="text-[#858D86] text-[10px]">2. Crop Kc</div>
@@ -334,8 +348,12 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
                   </div>
                   <div className="p-3.5 rounded-2xl bg-[#DDEDE2]/80 border border-[#4D966B]/20">
                     <div className="text-[#174C36] text-[10px]">4. Gross Need</div>
-                    <div className="text-lg font-bold text-[#174C36] mt-1">{waterData.grossWaterNeed_mm} mm</div>
-                    <div className="text-[10px] text-[#4D966B]">Eff. {waterData.irrigationEfficiencyPercent}%</div>
+                    <div className="text-lg font-bold text-[#174C36] mt-1">
+                      {waterData.grossWaterNeed_mm} mm
+                    </div>
+                    <div className="text-[10px] text-[#4D966B]">
+                      Eff. {waterData.irrigationEfficiencyPercent}%
+                    </div>
                   </div>
                 </div>
 
@@ -359,7 +377,9 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
                 </div>
 
                 <div className="glass-panel rounded-[20px] p-5">
-                  <div className="text-xs font-semibold text-[#858D86]">Total Farm Volume ({farm.areaAcres} Ac)</div>
+                  <div className="text-xs font-semibold text-[#858D86]">
+                    Total Farm Volume ({farm.areaAcres} Ac)
+                  </div>
                   <div className="text-2xl font-extrabold text-[#174C36] font-display tabular-nums mt-1">
                     {waterData.totalDailyLitersFarm.toLocaleString('en-IN')} L
                   </div>
@@ -392,11 +412,11 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
                 7-Day Rain-Adjusted Irrigation Schedule
               </h3>
               <p className="text-xs text-[#858D86] mt-0.5">
-                Effective precipitation calculated dynamically using the USDA Soil Conservation Service model.
+                Effective precipitation calculated using the USDA Soil Conservation Service model over Open-Meteo 7-day precipitation forecasts.
               </p>
             </div>
             <span className="text-[11px] font-mono text-[#174C36] bg-[#DDEDE2] px-3 py-1 rounded-xl font-semibold">
-              Synced with Forecast
+              Synced with Open-Meteo
             </span>
           </div>
 
@@ -455,11 +475,13 @@ export const WaterManagementSection: React.FC<WaterManagementSectionProps> = ({
           <div className="mt-5 flex justify-end">
             <button
               type="button"
-              onClick={() => onOpenAssistant(`How can I apply for 90% Drip Irrigation subsidy in ${farm.district}?`)}
+              onClick={() =>
+                onOpenAssistant(`How should I schedule drip irrigation for ${selectedCrop} in ${farm.district}?`)
+              }
               className="text-xs font-semibold text-[#174C36] hover:text-[#4D966B] flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-[#4D966B]" />
-              <span>Ask Rythu Nestham about Drip Subsidies</span>
+              <span>Ask Rythu Nestham about Irrigation Scheduling</span>
             </button>
           </div>
         </div>

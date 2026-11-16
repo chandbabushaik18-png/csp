@@ -1,73 +1,68 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Info, AlertTriangle, Calculator, Radio, Cpu, X } from 'lucide-react';
-import { DataProvenance, DataClassification } from '../types';
+import { Radio, AlertTriangle, Info, X, Calculator } from 'lucide-react';
+import { DataIntegrityState, DataProvenance } from '../types';
 
 interface DataProvenanceBadgeProps {
   provenance?: DataProvenance;
+  integrityState?: DataIntegrityState;
   size?: 'xs' | 'sm' | 'md';
   showModalOnClick?: boolean;
   className?: string;
 }
 
+export function resolveIntegrityState(
+  provenance?: DataProvenance,
+  explicit?: DataIntegrityState
+): DataIntegrityState {
+  if (explicit) return explicit;
+  if (provenance?.integrityState) return provenance.integrityState;
+  const cls = provenance?.classification;
+  if (cls === 'UNAVAILABLE') return 'UNAVAILABLE';
+  if (cls === 'NO_DATA') return 'NO_DATA';
+  return 'LIVE_DATA';
+}
+
 export const DataProvenanceBadge: React.FC<DataProvenanceBadgeProps> = ({
   provenance,
+  integrityState,
   size = 'xs',
   showModalOnClick = true,
   className = '',
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
 
-  if (!provenance) return null;
+  if (!provenance && !integrityState) return null;
 
-  const getBadgeStyle = (classification: DataClassification) => {
-    switch (classification) {
-      case 'REAL_API_DATA':
+  const state = resolveIntegrityState(provenance, integrityState);
+
+  const getBadgeStyle = () => {
+    switch (state) {
+      case 'LIVE_DATA':
         return {
-          bg: 'bg-[#DDEDE2]/80 text-[#174C36] border-[#4D966B]/25',
+          bg: 'bg-[#DDEDE2]/85 text-[#174C36] border-[#4D966B]/30',
           dot: 'bg-[#4D966B]',
-          icon: Radio,
-          label: 'REAL API DATA',
+          icon: provenance?.classification === 'CALCULATED_DATA' ? Calculator : Radio,
+          label: 'LIVE DATA',
         };
-      case 'REAL_GPS_DATA':
+      case 'UNAVAILABLE':
         return {
-          bg: 'bg-teal-50/85 text-teal-900 border-teal-300/60',
-          dot: 'bg-teal-600',
-          icon: ShieldCheck,
-          label: 'REAL GPS DATA',
-        };
-      case 'REAL_HARDWARE_SENSOR_DATA':
-        return {
-          bg: 'bg-indigo-50/85 text-indigo-900 border-indigo-300/60',
-          dot: 'bg-indigo-600',
-          icon: Cpu,
-          label: 'REAL HARDWARE SENSOR',
-        };
-      case 'CALCULATED_DATA':
-        return {
-          bg: 'bg-sky-50/85 text-sky-900 border-sky-300/60',
-          dot: 'bg-sky-600',
-          icon: Calculator,
-          label: 'CALCULATED DATA',
-        };
-      case 'ESTIMATED_DATA':
-        return {
-          bg: 'bg-amber-50/85 text-amber-900 border-amber-300/60',
+          bg: 'bg-amber-50/90 text-amber-900 border-amber-300/70',
           dot: 'bg-amber-500',
           icon: AlertTriangle,
-          label: 'ESTIMATED DATA',
+          label: 'UNAVAILABLE',
         };
-      case 'DEMO_DATA':
+      case 'NO_DATA':
       default:
         return {
-          bg: 'bg-white/75 text-[#5D665E] border-[#858D86]/25',
+          bg: 'bg-white/80 text-[#5D665E] border-[#858D86]/30',
           dot: 'bg-[#858D86]',
           icon: Info,
-          label: 'DEMO / OFFLINE',
+          label: 'NO DATA',
         };
     }
   };
 
-  const style = getBadgeStyle(provenance.classification);
+  const style = getBadgeStyle();
   const Icon = style.icon;
 
   const sizeClasses = {
@@ -84,12 +79,12 @@ export const DataProvenanceBadge: React.FC<DataProvenanceBadgeProps> = ({
         className={`inline-flex items-center font-semibold rounded-xl border backdrop-blur-md tracking-tight transition-all ${style.bg} ${sizeClasses} ${
           showModalOnClick ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
         } ${className}`}
-        title={`Data Provenance: ${style.label} — Click to inspect audit trail`}
+        title={`Data Status: ${style.label} — Click to inspect source & timestamps`}
       >
         <Icon className="w-3 h-3 shrink-0" />
         <span className="font-mono uppercase">{style.label}</span>
-        {provenance.source && (
-          <span className="opacity-75 font-normal truncate max-w-[150px] hidden sm:inline">
+        {provenance?.source && (
+          <span className="opacity-75 font-normal truncate max-w-[170px] hidden sm:inline">
             · {provenance.source}
           </span>
         )}
@@ -102,7 +97,7 @@ export const DataProvenanceBadge: React.FC<DataProvenanceBadgeProps> = ({
               <div className="flex items-center gap-2.5">
                 <span className={`w-2.5 h-2.5 rounded-full ${style.dot}`} />
                 <h3 className="text-sm font-bold text-[#202820] font-display">
-                  Data Integrity & Provenance Audit
+                  Data Source & Integrity Audit
                 </h3>
               </div>
               <button
@@ -117,41 +112,68 @@ export const DataProvenanceBadge: React.FC<DataProvenanceBadgeProps> = ({
             <div className="p-6 space-y-4 text-xs">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
-                  Data Classification
+                  Integrity State
                 </div>
                 <div className={`mt-1.5 px-3 py-1.5 rounded-xl border font-mono font-bold inline-block ${style.bg}`}>
-                  {provenance.classification}
+                  {style.label}
                 </div>
               </div>
 
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
-                  Authoritative Source
-                </div>
-                <div className="text-[#202820] font-semibold mt-0.5">{provenance.source}</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
-                  Timestamp & Freshness
-                </div>
-                <div className="text-[#202820] mt-0.5 font-mono">
-                  {new Date(provenance.timestamp).toLocaleString('en-IN', {
-                    dateStyle: 'medium',
-                    timeStyle: 'medium',
-                  })}
-                  {provenance.isRealTime && (
-                    <span className="ml-2 text-[#174C36] font-bold font-sans">
-                      (Live Measurement)
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {provenance.methodology && (
+              {provenance?.source && (
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
-                    Scientific Equation / Algorithm
+                    Data Source
+                  </div>
+                  <div className="text-[#202820] font-semibold mt-0.5">{provenance.source}</div>
+                </div>
+              )}
+
+              {provenance?.locationLabel && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
+                    Selected Location
+                  </div>
+                  <div className="text-[#202820] font-medium mt-0.5">{provenance.locationLabel}</div>
+                </div>
+              )}
+
+              {provenance?.observationDate && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
+                    Observation / Acquisition Date
+                  </div>
+                  <div className="text-[#202820] font-mono mt-0.5">{provenance.observationDate}</div>
+                </div>
+              )}
+
+              {provenance?.timestamp && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
+                    Last Retrieval Attempt
+                  </div>
+                  <div className="text-[#202820] mt-0.5 font-mono">
+                    {new Date(provenance.timestamp).toLocaleString('en-IN', {
+                      dateStyle: 'medium',
+                      timeStyle: 'medium',
+                    })}
+                    {provenance.isModelEstimate && (
+                      <span className="ml-2 text-[#4D966B] font-bold font-sans">
+                        (Model-Based Estimate)
+                      </span>
+                    )}
+                    {!provenance.isRealTime && provenance.observationDate && (
+                      <span className="ml-2 text-[#5D665E] font-semibold font-sans">
+                        (Periodic Overpass)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {provenance?.methodology && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
+                    Methodology
                   </div>
                   <div className="mt-1.5 p-3 bg-white/75 rounded-xl border border-[#174C36]/10 font-mono text-[#202820] text-[11px] leading-relaxed">
                     {provenance.methodology}
@@ -159,19 +181,14 @@ export const DataProvenanceBadge: React.FC<DataProvenanceBadgeProps> = ({
                 </div>
               )}
 
-              {provenance.notes && (
+              {provenance?.notes && (
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[#858D86]">
-                    Quality & Limitations
+                    Scope & Limitations
                   </div>
                   <p className="text-[#5D665E] mt-1 leading-relaxed">{provenance.notes}</p>
                 </div>
               )}
-
-              <div className="pt-3 border-t border-[#174C36]/10 flex items-center justify-between text-[11px] text-[#858D86]">
-                <span>FarmersNeed Integrity Standard</span>
-                <span className="font-semibold text-[#174C36]">Zero Synthetic Fallbacks</span>
-              </div>
             </div>
 
             <div className="px-6 py-3.5 border-t border-[#174C36]/10 flex justify-end bg-white/40">
@@ -180,7 +197,7 @@ export const DataProvenanceBadge: React.FC<DataProvenanceBadgeProps> = ({
                 onClick={() => setModalOpen(false)}
                 className="px-4 py-2 text-xs font-semibold bg-[#174C36] text-white rounded-xl hover:bg-[#113A29] transition-colors cursor-pointer"
               >
-                Close Audit
+                Close
               </button>
             </div>
           </div>

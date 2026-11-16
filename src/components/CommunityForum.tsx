@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MessageSquare, ThumbsUp, Plus, MapPin, Send, MessageCircle } from 'lucide-react';
 import { Language, Discussion, Comment } from '../types';
 import { translations } from '../translations';
+import { safeFetchJson } from '../utils/safeFetchJson';
 
 interface CommunityForumProps {
   currentLang: Language;
@@ -19,22 +20,23 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
   const [submittingComment, setSubmittingComment] = useState(false);
 
   const [showNewPostModal, setShowNewPostModal] = useState(false);
-  const [author, setAuthor] = useState('Venkateswara Rao');
-  const [village, setVillage] = useState('Pedavadlapudi');
-  const [district, setDistrict] = useState('Guntur');
+  const [author, setAuthor] = useState('');
+  const [village, setVillage] = useState('');
+  const [district, setDistrict] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('Pest Control');
-  const [crop, setCrop] = useState('Chilli');
+  const [crop, setCrop] = useState('');
   const [submittingPost, setSubmittingPost] = useState(false);
+  const [replyAuthor, setReplyAuthor] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   const fetchDiscussions = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/discussions');
-      if (res.ok) {
-        const data = await res.json();
-        setDiscussions(data.discussions || []);
+      const res = await safeFetchJson<{ discussions?: Discussion[] }>('/api/discussions');
+      if (res.ok && res.data) {
+        setDiscussions(res.data.discussions || []);
       }
     } catch (e) {
       console.error(e);
@@ -45,10 +47,9 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
 
   const fetchComments = async (postId: string) => {
     try {
-      const res = await fetch(`/api/discussions/${postId}/comments`);
-      if (res.ok) {
-        const data = await res.json();
-        setComments(data.comments || []);
+      const res = await safeFetchJson<{ comments?: Comment[] }>(`/api/discussions/${postId}/comments`);
+      if (res.ok && res.data) {
+        setComments(res.data.comments || []);
       }
     } catch (e) {
       console.error(e);
@@ -72,25 +73,30 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPost || !commentText.trim()) return;
+    if (!selectedPost || !commentText.trim() || !replyAuthor.trim()) return;
     setSubmittingComment(true);
+    setFormError(null);
     try {
-      const res = await fetch(`/api/discussions/${selectedPost.id}/comments`, {
+      const res = await safeFetchJson<any>(`/api/discussions/${selectedPost.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          author: 'Venkateswara Rao',
-          role: 'Progressive Farmer',
-          content: commentText,
+          author: replyAuthor.trim(),
+          role: 'Farmer / Member',
+          content: commentText.trim(),
         }),
       });
-      if (res.ok) {
+      const data = res.data;
+      if (res.ok && data?.success) {
         setCommentText('');
         fetchComments(selectedPost.id);
         fetchDiscussions();
+      } else {
+        setFormError(data?.error || 'Could not post comment.');
       }
     } catch (e) {
       console.error(e);
+      setFormError('Network error while posting comment.');
     } finally {
       setSubmittingComment(false);
     }
@@ -98,30 +104,38 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    if (!author.trim() || !village.trim() || !district.trim() || !title.trim() || !content.trim()) {
+      setFormError('Please fill in your name, village, district, title, and details.');
+      return;
+    }
     setSubmittingPost(true);
+    setFormError(null);
     try {
-      const res = await fetch('/api/discussions', {
+      const res = await safeFetchJson<any>('/api/discussions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          author,
-          village,
-          district,
-          title,
-          content,
+          author: author.trim(),
+          village: village.trim(),
+          district: district.trim(),
+          title: title.trim(),
+          content: content.trim(),
           category,
-          crop,
+          crop: crop.trim() || undefined,
         }),
       });
-      if (res.ok) {
+      const data = res.data;
+      if (res.ok && data?.success) {
         setShowNewPostModal(false);
         setTitle('');
         setContent('');
         fetchDiscussions();
+      } else {
+        setFormError(data?.error || 'Could not publish discussion topic.');
       }
     } catch (e) {
       console.error(e);
+      setFormError('Network error while publishing topic.');
     } finally {
       setSubmittingPost(false);
     }
@@ -186,7 +200,9 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
             [1, 2, 3].map((k) => <div key={k} className="h-36 rounded-[22px] skeleton-glass" />)
           ) : filtered.length === 0 ? (
             <div className="glass-panel rounded-[22px] p-8 text-center text-xs text-[#858D86]">
-              No community topics in this category yet. Start a conversation above.
+              {discussions.length === 0
+                ? 'No community discussions yet. Start a topic above.'
+                : 'No community topics in this category yet.'}
             </div>
           ) : (
             filtered.map((post) => (
@@ -285,22 +301,35 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
                 )}
               </div>
 
-              <form onSubmit={handleAddComment} className="pt-3 border-t border-[#174C36]/10 flex gap-2">
+              <form onSubmit={handleAddComment} className="pt-3 border-t border-[#174C36]/10 space-y-2">
+                {formError && (
+                  <div className="text-[11px] text-red-700 font-medium">{formError}</div>
+                )}
                 <input
                   type="text"
-                  placeholder="Share your practical experience..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  className="flex-1 bg-white/75 border border-[#174C36]/15 rounded-[12px] px-3 py-2 text-xs font-medium text-[#202820] focus:bg-white focus:outline-[#174C36]"
+                  required
+                  placeholder="Your name..."
+                  value={replyAuthor}
+                  onChange={(e) => setReplyAuthor(e.target.value)}
+                  className="w-full bg-white/75 border border-[#174C36]/15 rounded-[12px] px-3 py-1.5 text-xs font-medium text-[#202820] focus:bg-white focus:outline-[#174C36]"
                 />
-                <button
-                  type="submit"
-                  disabled={submittingComment || !commentText.trim()}
-                  className="px-3.5 py-2 bg-[#174C36] hover:bg-[#113A29] text-white rounded-[12px] text-xs font-semibold cursor-pointer disabled:opacity-40"
-                  aria-label="Send reply"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Share your practical experience..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    className="flex-1 bg-white/75 border border-[#174C36]/15 rounded-[12px] px-3 py-2 text-xs font-medium text-[#202820] focus:bg-white focus:outline-[#174C36]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={submittingComment || !commentText.trim() || !replyAuthor.trim()}
+                    className="px-3.5 py-2 bg-[#174C36] hover:bg-[#113A29] text-white rounded-[12px] text-xs font-semibold cursor-pointer disabled:opacity-40"
+                    aria-label="Send reply"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </form>
             </div>
           ) : (
@@ -412,6 +441,12 @@ export const CommunityForum: React.FC<CommunityForumProps> = ({ currentLang }) =
                   className="w-full bg-white/80 border border-[#174C36]/15 rounded-[12px] p-2.5 font-medium text-[#202820]"
                 />
               </div>
+
+              {formError && (
+                <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 font-medium">
+                  {formError}
+                </div>
+              )}
 
               <div className="pt-4 border-t border-[#174C36]/10 flex items-center justify-end gap-3">
                 <button

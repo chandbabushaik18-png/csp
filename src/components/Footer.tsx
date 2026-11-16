@@ -26,7 +26,7 @@ export const Footer: React.FC<FooterProps> = ({ currentLang, onNavigateTab, onOp
               </span>
             </div>
             <p className="text-[#858D86] leading-relaxed">
-              Precision agriculture intelligence combining Copernicus Sentinel-2 remote sensing, hyper-local weather telemetry, FAO-56 water budgeting, and bilingual agronomy.
+              Precision agriculture platform combining AWS Sentinel-2 STAC scene metadata, Open-Meteo numerical weather forecasts, FAO-56 water budgeting, and Gemini AI crop assistance.
             </p>
           </div>
 
@@ -42,7 +42,7 @@ export const Footer: React.FC<FooterProps> = ({ currentLang, onNavigateTab, onOp
               </li>
               <li>
                 <button type="button" onClick={() => onNavigateTab('satellite')} className="hover:text-[#174C36] transition-colors cursor-pointer">
-                  Crop Intelligence (NDVI / NDWI)
+                  Sentinel-2 Catalog Explorer
                 </button>
               </li>
               <li>
@@ -52,7 +52,7 @@ export const Footer: React.FC<FooterProps> = ({ currentLang, onNavigateTab, onOp
               </li>
               <li>
                 <button type="button" onClick={() => onNavigateTab('doctor')} className="hover:text-[#174C36] transition-colors cursor-pointer">
-                  AI Leaf Pathology Doctor
+                  AI Crop Doctor (Gemini Vision)
                 </button>
               </li>
             </ul>
@@ -60,12 +60,12 @@ export const Footer: React.FC<FooterProps> = ({ currentLang, onNavigateTab, onOp
 
           <div className="space-y-2">
             <div className="font-bold text-[#202820] uppercase tracking-wider text-[11px]">
-              Services & Markets
+              Services & Hardware
             </div>
             <ul className="space-y-1.5 text-[#5D665E]">
               <li>
                 <button type="button" onClick={() => onNavigateTab('drone')} className="hover:text-[#174C36] transition-colors cursor-pointer">
-                  DGCA Drone Spraying
+                  Drone Spraying Requests
                 </button>
               </li>
               <li>
@@ -75,7 +75,7 @@ export const Footer: React.FC<FooterProps> = ({ currentLang, onNavigateTab, onOp
               </li>
               <li>
                 <button type="button" onClick={() => onNavigateTab('market')} className="hover:text-[#174C36] transition-colors cursor-pointer">
-                  Live APMC Mandi Prices
+                  APMC Mandi Market Feed
                 </button>
               </li>
               <li>

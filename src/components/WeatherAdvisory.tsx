@@ -14,50 +14,45 @@ import {
   Gauge,
   Sunrise,
   Sunset,
+  Info,
 } from 'lucide-react';
-import { Language, WeatherData } from '../types';
+import { FarmProfile, Language, WeatherData } from '../types';
 import { translations } from '../translations';
 import { DataProvenanceBadge } from './DataProvenanceBadge';
 
 interface WeatherAdvisoryProps {
   currentLang: Language;
+  farm: FarmProfile;
   weather: WeatherData | null;
   loading: boolean;
-  onRefreshLocation: (district?: string) => void;
+  error?: string | null;
+  onRefreshLocation: () => void;
   onUseGps: () => void;
 }
 
 export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
   currentLang,
+  farm,
   weather,
   loading,
+  error,
   onRefreshLocation,
   onUseGps,
 }) => {
   const t = translations[currentLang];
   const [activeView, setActiveView] = useState<'hourly' | '7day'>('hourly');
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
   const [autoRefreshCountdown, setAutoRefreshCountdown] = useState<number>(600);
 
   useEffect(() => {
+    setAutoRefreshCountdown(600);
+  }, [weather?.lastUpdated]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
-      setAutoRefreshCountdown((prev) => {
-        if (prev <= 1) {
-          onRefreshLocation();
-          setLastRefreshedAt(new Date());
-          return 600;
-        }
-        return prev - 1;
-      });
+      setAutoRefreshCountdown((prev) => (prev <= 1 ? 600 : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, [onRefreshLocation]);
-
-  const handleManualRefresh = () => {
-    onRefreshLocation();
-    setLastRefreshedAt(new Date());
-    setAutoRefreshCountdown(600);
-  };
+  }, []);
 
   const getSprayBadgeClass = (badge?: string) => {
     if (badge === 'ideal') return 'bg-[#DDEDE2] text-[#174C36] border-[#4D966B]/30';
@@ -70,33 +65,49 @@ export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Main Current Microclimate Glass Panel */}
+      {/* Main Weather Panel */}
       <div className="glass-panel rounded-[24px] p-6 sm:p-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-bold text-[#4D966B] tracking-wider uppercase font-mono">
-                Hyper-Local Farm Meteorology
+                Open-Meteo Numerical Weather Forecast (Model Estimate)
               </span>
-              {weather?.provenance && <DataProvenanceBadge provenance={weather.provenance} />}
+              {weather?.provenance ? (
+                <DataProvenanceBadge provenance={weather.provenance} />
+              ) : error ? (
+                <DataProvenanceBadge
+                  integrityState="UNAVAILABLE"
+                  provenance={{
+                    integrityState: 'UNAVAILABLE',
+                    classification: 'UNAVAILABLE',
+                    source: 'Open-Meteo Forecast API',
+                    timestamp: new Date().toISOString(),
+                    isRealTime: false,
+                    isModelEstimate: true,
+                    locationLabel: `${farm.village || farm.district} (${farm.center[0].toFixed(4)}°N, ${farm.center[1].toFixed(4)}°E)`,
+                    notes: error,
+                  }}
+                />
+              ) : null}
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#202820] font-display mt-1">
               {t.weatherTitle}
             </h2>
             <p className="text-xs sm:text-sm text-[#858D86] mt-1 max-w-2xl">
-              Real-time atmospheric telemetry and 7-day forecast from Open-Meteo numerical weather prediction for your farm coordinates.
+              {t.weatherSub}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={handleManualRefresh}
+              onClick={onRefreshLocation}
               disabled={loading}
               className="px-3.5 py-2.5 text-xs font-semibold text-[#202820] bg-white/80 hover:bg-white rounded-[12px] transition-colors border border-[#174C36]/15 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-[#4D966B] ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Refreshing...' : 'Refresh Feed'}</span>
+              <span>{loading ? 'Refreshing...' : 'Refresh Forecast'}</span>
             </button>
 
             <button
@@ -110,23 +121,55 @@ export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
           </div>
         </div>
 
-        {/* Timestamps & Coordinates */}
-        <div className="mt-4 pt-4 border-t border-[#174C36]/10 flex flex-wrap items-center justify-between text-[11px] text-[#858D86] gap-2">
-          <div className="flex items-center gap-2 font-mono">
+        {/* Selected Location + Last Successful Update */}
+        <div className="mt-4 pt-4 border-t border-[#174C36]/10 flex flex-wrap items-center justify-between text-[11px] text-[#5D665E] gap-2">
+          <div className="flex flex-wrap items-center gap-2 font-mono">
             <Clock className="w-3.5 h-3.5 text-[#4D966B]" />
-            <span>Updated {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>
+              {weather?.lastUpdated
+                ? `Last updated: ${new Date(weather.lastUpdated).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}`
+                : 'No forecast retrieved yet'}
+            </span>
             <span>·</span>
             <span>Auto-sync in {minutesRemaining}m {secondsRemaining}s</span>
           </div>
 
-          {weather?.location && (
-            <div className="font-mono text-[#174C36] bg-[#DDEDE2]/75 px-2.5 py-1 rounded-xl font-semibold">
-              {weather.location.lat.toFixed(4)}°N, {weather.location.lon.toFixed(4)}°E
-            </div>
-          )}
+          <div className="font-mono text-[#174C36] bg-[#DDEDE2]/75 px-2.5 py-1 rounded-xl font-semibold">
+            {farm.village || farm.district} ({farm.center[0].toFixed(4)}°N, {farm.center[1].toFixed(4)}°E)
+          </div>
         </div>
 
-        {weather ? (
+        {/* Model-Estimate Disclosure Notice */}
+        <div className="mt-4 p-3 rounded-2xl bg-white/65 border border-[#174C36]/10 flex items-center gap-2 text-[11px] text-[#5D665E]">
+          <Info className="w-4 h-4 text-[#4D966B] shrink-0" />
+          <span>
+            Weather figures are <strong>model-based numerical forecasts</strong> from Open-Meteo gridded assimilation for your selected coordinates—not direct on-farm weather station measurements.
+          </span>
+        </div>
+
+        {error ? (
+          <div className="mt-6 p-6 rounded-[20px] bg-amber-50/80 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div className="flex items-start gap-3 text-amber-950">
+              <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold text-sm">Weather Forecast Unavailable</div>
+                <p className="text-amber-900 mt-1">{error}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onRefreshLocation}
+              className="px-4 py-2 bg-[#174C36] text-white rounded-xl font-semibold flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </div>
+        ) : weather ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 pt-6 border-t border-[#174C36]/10 items-center">
             <div className="lg:col-span-5 flex items-center gap-5">
               <div className="p-4 bg-[#DDEDE2] rounded-[22px] text-[#174C36]">
@@ -141,7 +184,7 @@ export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
                 </div>
                 <div className="text-xs text-[#858D86] mt-0.5 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-[#4D966B]" />
-                  <span>{weather.location.city}</span>
+                  <span>{weather.location.city || farm.village || farm.district}</span>
                   <span>·</span>
                   <span>Feels {weather.current.feelsLike}°C</span>
                 </div>
@@ -151,9 +194,13 @@ export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
             <div className="lg:col-span-7 p-5 rounded-[20px] bg-white/80 border border-white space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#858D86]">
-                  Chemical & Spraying Safety Window
+                  Spraying Window Assessment (Calculated)
                 </span>
-                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${getSprayBadgeClass(weather.current.sprayBadge)}`}>
+                <span
+                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${getSprayBadgeClass(
+                    weather.current.sprayBadge
+                  )}`}
+                >
                   {weather.current.sprayBadge.toUpperCase()}
                 </span>
               </div>
@@ -171,26 +218,36 @@ export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
 
               <p className="text-xs text-[#5D665E] leading-relaxed">
                 {weather.current.sprayBadge === 'ideal'
-                  ? `Low drift profile (${weather.current.windSpeedKmh} km/h wind, ${weather.current.rainProbability}% rain risk). Droplets adhere effectively.`
+                  ? `Low forecast drift profile (${weather.current.windSpeedKmh} km/h wind, ${weather.current.rainProbability}% rain chance).`
                   : `Elevated drift or wash-off risk (${weather.current.windSpeedKmh} km/h wind, ${weather.current.rainProbability}% rain chance). Postpone chemical spraying.`}
               </p>
             </div>
           </div>
         ) : (
           <div className="p-8 text-center text-[#858D86] text-xs">
-            {loading ? 'Retrieving live meteorology data...' : 'Click Detect Farm GPS above to sync weather.'}
+            {loading ? 'Retrieving Open-Meteo model forecast...' : 'Click Refresh Forecast to load weather.'}
           </div>
         )}
 
-        {weather && (
+        {weather && !error && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 mt-6 pt-6 border-t border-[#174C36]/10 text-xs">
             {[
               { icon: Droplets, label: 'Humidity', val: `${weather.current.humidity}%`, sub: 'Relative RH' },
-              { icon: Wind, label: 'Wind Speed', val: `${weather.current.windSpeedKmh} km/h`, sub: `Dir ${weather.current.windDirectionDeg}°` },
+              {
+                icon: Wind,
+                label: 'Wind Speed',
+                val: `${weather.current.windSpeedKmh} km/h`,
+                sub: `Dir ${weather.current.windDirectionDeg}°`,
+              },
               { icon: Gauge, label: 'Pressure', val: `${weather.current.pressure} hPa`, sub: 'Surface' },
-              { icon: CloudRain, label: 'Rain Prob.', val: `${weather.current.rainProbability}%`, sub: `${weather.current.precipitationMm} mm ppt` },
-              { icon: Sunrise, label: 'Sunrise', val: weather.current.sunrise, sub: 'AM Spray Start' },
-              { icon: Sunset, label: 'Sunset', val: weather.current.sunset, sub: 'Evening Window' },
+              {
+                icon: CloudRain,
+                label: 'Rain Prob.',
+                val: `${weather.current.rainProbability}%`,
+                sub: `${weather.current.precipitationMm} mm ppt`,
+              },
+              { icon: Sunrise, label: 'Sunrise', val: weather.current.sunrise, sub: 'AM Window' },
+              { icon: Sunset, label: 'Sunset', val: weather.current.sunset, sub: 'PM Window' },
             ].map((item, idx) => {
               const Icon = item.icon;
               return (
@@ -211,15 +268,16 @@ export const WeatherAdvisory: React.FC<WeatherAdvisoryProps> = ({
       </div>
 
       {/* Hourly & 7-Day Forecast Matrix */}
-      {weather && (
+      {weather && !error && (
         <div className="glass-panel rounded-[24px] p-6 sm:p-8 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-[#202820] font-display">
-                Precision Agricultural Forecast
+                Hourly & 7-Day Model Forecast
               </h3>
               <p className="text-xs text-[#858D86] mt-0.5">
-                ECMWF & NOAA GFS numerical weather assimilation.
+                Open-Meteo ECMWF & NOAA GFS numerical weather prediction for {weather.location.lat.toFixed(4)}°N,{' '}
+                {weather.location.lon.toFixed(4)}°E.
               </p>
             </div>
 
